@@ -1,5 +1,0 @@
-- Python 3.11 + FastAPI + SQLAlchemy + SQLite
-- 前端: HTML + Tailwind CSS + Alpine.js（无 React/Vue）
-- 所有 API 返回统一格式 {"code": 0, "data": {}, "msg": ""}
-- 日志用 loguru，配置用 PyYAML 读 config.yaml
-- 中文注释，docstring 用中文
