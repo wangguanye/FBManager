@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+aiosqlite
+cryptography
+pyyaml
+python-dotenv
+apscheduler
+playwright
+loguru
+jinja2
+python-multipart
