@@ -1,0 +1,1149 @@
+> **文档版本**：v3.1　　**创建日期**：2026-03-06　　**最后更新**：2026-03-08　　**作者**：王冠业
+> 
+
+---
+
+## 一、产品概述
+
+### 1.1 产品定位
+
+**冠业Facebook投放管理系统（FBManager）** 是一款本地运行的 Web 工具，面向 Facebook 广告投放全流程资产管理与养号自动化，将账号采购、代理配置、指纹浏览器窗口绑定、养号 RPA、投放账户管理集中到一个界面，**替代分散在 Notion 表格和手动记录中的低效操作方式**。
+
+### 1.2 目标用户
+
+王冠业（单人使用），Facebook 海外投放项目负责人，当前面向美国减肥市场，以 WhatsApp 通话为转化路径。
+
+### 1.3 核心价值
+
+- **资产统一管理**：FB 个人号 / 广告账户 / 代理 IP / 比特浏览器窗口，一处可查、一处可控
+- **养号自动化**：参考 [Facebook个人养号SOP](https://www.notion.so/Facebook-SOP-40463d525ba6429c9f82b4c9eb29afef?pvs=21) ，模拟真人浏览 + 定时调度 + 多账号并发分批养号，释放人工重复劳动
+- **状态驱动级联**：账号封禁自动禁用关联 IP 与窗口，杜绝误复用
+- **实时监控与日志**：每一步 RPA 操作可追溯，异常秒级告警
+
+### 1.4 解决的问题
+
+| 痛点 | 解决方案 |
+| --- | --- |
+| 账号、代理、窗口等资产信息分散，操作效率低 | 统一 Web 界面管理所有资产及绑定关系 |
+| 养号全靠人工，重复劳动量大，易遗漏出错 | RPA 自动化执行每日养号任务，人工仅处理待办 |
+| 无法实时掌握养号进度和异常状态 | Dashboard 总览 + 分级日志 + 异常告警 |
+| 封号后关联资产未及时处置，导致 IP/窗口被误用 | 状态级联自动禁用关联资产，UI 红色强提示 |
+
+### 1.5 系统定位
+
+| 属性 | 说明 |
+| --- | --- |
+| **系统名称** | 冠业Facebook投放管理系统（FBManager） |
+| **运行方式** | 本地运行（Windows PC），不部署至公网服务器 |
+| **访问方式** | 本机浏览器访问 `http://127.0.0.1:8000` |
+| **数据存储** | 本地 SQLite 数据库，不关联 Notion |
+| **依赖外部服务** | 比特浏览器（同一台电脑运行）— [⿻ API接口文档](https://doc2.bitbrowser.cn/jiekou.html) |
+| **自动化引擎** | Playwright — [Playwright Python 文档](https://playwright.dev/python/docs/api/class-playwright) |
+| **开发方式** | 通过 Trae AI 模型辅助开发 |
+
+### 1.6 设计原则
+
+> 以下原则贯穿全部模块，不可妥协：
+> 
+- **最小耦合**：每个功能点独立成模块（点赞、评论、滚动 Feed 等），模块间仅通过标准接口通信，任意模块可独立替换
+- **状态驱动**：所有账号、代理、窗口均有明确状态机，状态变更触发级联响应
+- **调度中心化**：所有定时任务统一由 Scheduler 管理，不在业务模块内写定时逻辑
+- **幂等执行**：自动化任务支持重试，任务失败不影响其余账号的执行
+- **本地优先**：无外部依赖（除比特浏览器 API），所有数据落 SQLite，不上云
+
+---
+
+## 二、页面功能详述
+
+### 1. 总览 Dashboard
+
+#### 页面功能
+
+系统首页，提供全局状态一览，让用户在一屏内掌握所有账号的养号进度、今日任务执行情况和需要关注的异常告警，同时作为快速操作的入口。
+
+#### UI 布局
+
+- **顶部统计卡片区**：横向排列 4 个数据卡片
+    - 账号总数（按状态分色显示：待养号 🔵 / 养号中 🟡 / 养号就绪 🟢 / 投放养号中 🟢✨ / 异常 🟠 / 已封禁 🔴）
+    - 今日任务总数 / 已完成数 / 失败数
+    - 当前活跃 RPA 进程数 / 最大并发数（≤5）
+    - 未处理告警数量（ERROR + CRITICAL 合计）
+- **左侧：今日任务执行进度区**：表格形式展示今日所有账号的任务执行状态
+    - 列：账号名 | Day N | 任务类型（自动/人工待办）| 状态（待执行/执行中/已完成/失败）| 操作
+    - 支持按状态筛选
+- **右侧：异常告警列表区**：以时间倒序列出当前未处理的 WARN / ERROR / CRITICAL 告警
+    - 列：时间 | 账号 | 级别（色标）| 告警内容 | 操作（查看详情 / 关闭告警）
+- **底部：人工待办卡片区**：独立卡片展示所有 `task_type=manual` 的待办任务
+    - 每张卡片显示：账号名 | Day N | 任务内容 | 「确认完成」按钮
+    - 标注「⚠️ 需手动完成」
+
+#### 交互逻辑
+
+- **页面加载**：自动拉取 `/api/tasks/today`、`/api/alerts`、`/api/scheduler/status` 渲染各区域
+- **点击统计卡片中的状态数字**：跳转至账号管理页，自动带入对应状态筛选条件
+- **点击「立即执行」按钮**：调用 `POST /api/tasks/{account_id}/run`，按钮变为 loading 状态，执行完成后刷新该行状态
+- **点击人工待办卡片的「确认完成」**：调用 `POST /api/tasks/{task_id}/complete`，卡片淡出，更新任务进度统计
+- **点击告警的「关闭」按钮**：调用 `POST /api/alerts/{id}/dismiss`，该条告警从列表移除，未处理数 -1
+- **自动刷新**：页面每 30 秒轮询一次任务状态和告警列表，保持数据实时性
+
+---
+
+### 2. 账号管理
+
+#### 页面功能
+
+FB 个人账号的全生命周期管理，包括新增、编辑、绑定浏览器窗口与代理 IP、手动修改状态，以及查看每个账号的养号进度和关联资产。
+
+#### UI 布局
+
+- **顶部操作栏**：「+ 新增账号」按钮 + 搜索框（按用户名/备注模糊搜索）+ 状态筛选下拉（全部 / 待养号 / 养号中 / 养号就绪 / 投放养号中 / 异常 / 已封禁）
+- **主体：账号列表表格**
+    - 列：状态色标 | 用户名 | 养号天数（Day N / 14 进度条，≥14 显示「✅ 可投放」）| 绑定代理 | 绑定窗口 | 最后活跃时间 | 操作（编辑 / 绑定 / 改状态 / 删除）
+    - 已封禁账号整行红色背景 + 「禁用」标签
+- **右侧滑出面板（账号详情）**：点击账号行展开
+    - 上方：账号基本信息（用户名、邮箱、地区、目标时区、2FA 状态、创建时间、备注）
+    - 中间：关联资产卡片（绑定的代理 IP + 浏览器窗口 + BM + 广告账户 + Fanpage）
+    - 下方：该账号近 7 天任务执行历史（迷你时间线）
+    - 底部按钮：「立即执行今日任务」
+
+#### 资产关联关系
+
+```mermaid
+erDiagram
+    FB_ACCOUNT ||--|| BROWSER_WINDOW : "1:1 绑定"
+    FB_ACCOUNT ||--|| PROXY_IP : "1:1 绑定"
+    FB_ACCOUNT ||--o{ AD_ACCOUNT : "1:N"
+    FB_ACCOUNT ||--o| BM : "1:1"
+    FB_ACCOUNT ||--o| FANPAGE : "1:N"
+    BM ||--o{ AD_ACCOUNT : "contains"
+```
+
+> 每个 FB 账号**必须 1:1 绑定**一个代理 IP 和一个浏览器窗口，三者生命周期联动。封号时级联禁用关联资产。
+> 
+
+#### 交互逻辑
+
+- **新增账号**：点击「+ 新增账号」→ 弹出表单（用户名、密码、邮箱、邮箱密码、地区、目标时区、备注）→ 提交后调用 `POST /api/accounts`，密码类字段自动加密存储 → 新账号状态默认为「待养号」
+- **绑定窗口/代理**：点击「绑定」→ 弹出绑定面板，左侧选择可用代理 IP（仅显示「空闲」状态的代理），右侧选择可用浏览器窗口 → 确认后调用 `POST /api/accounts/{id}/bind`
+- **手动修改状态**：点击状态色标 → 弹出下拉菜单，选择目标状态 → 确认后调用 `PATCH /api/accounts/{id}`
+    - 若选择「已封禁」→ 系统弹出确认框「确认封禁？将同时禁用关联的代理 IP 和浏览器窗口」→ 确认后触发级联
+- **删除账号**：软删除，保留日志，调用 `DELETE /api/accounts/{id}`，列表中灰色显示已删除账号（可通过筛选隐藏）
+- **账号状态机流转**
+
+```mermaid
+stateDiagram-v2
+    [*] --> 待养号: 账号录入
+    待养号 --> 养号中: 调度启动
+    养号中 --> 养号就绪: Day≥14 且无异常
+    养号就绪 --> 投放养号中: 绑定广告账户并激活投放
+    note right of 投放养号中
+        投放期间养号不停
+        每日行为任务持续执行
+    end note
+    养号中 --> 异常: 触发验证/封号检测
+    投放养号中 --> 异常: 广告账户异常或封号检测
+    异常 --> 已封禁: 确认永封
+    已封禁 --> [*]: 弃用（级联禁用IP+窗口）
+    异常 --> 养号中: 申诉成功/恢复
+```
+
+> ⚠️ SOP 明确「投放开始后养号不停」，因此没有单独的「投放中」状态——账号在投放期始终处于「投放养号中」，每日行为任务与广告投放**并行运行**。
+> 
+
+---
+
+### 3. 代理管理
+
+#### 页面功能
+
+管理所有代理 IP 资源，查看每条代理的绑定关系和使用状态，支持新增、编辑和手动改状态。
+
+#### UI 布局
+
+- **顶部操作栏**：「+ 新增代理」按钮 + 搜索框（按 IP 地址/地区搜索）+ 状态筛选下拉（全部 / 空闲 / 使用中 / 永久禁用）
+- **主体：代理列表表格**
+    - 列：状态色标 | IP 地址:端口 | 类型（HTTP/SOCKS5）| 归属地区 | 用户名 | 绑定账号名（点击可跳转）| 操作（编辑 / 改状态）
+    - 永久禁用的代理整行红色背景 + 「禁用」标签
+
+#### 交互逻辑
+
+- **新增代理**：点击「+ 新增代理」→ 弹出表单（IP 地址、端口、用户名、密码、类型、归属地区）→ 提交后调用 `POST /api/proxies`，密码加密存储，状态默认「空闲」
+- **编辑代理**：点击「编辑」→ 弹出预填表单 → 修改后调用 `PATCH /api/proxies/{id}`
+- **手动改状态**：点击状态色标 → 下拉选择 → 确认更新
+- **级联禁用提示**：当代理因账号封禁被自动禁用时，列表中该行闪烁一次红色 + Toast 提示「代理 xxx 因账号 xxx 封禁被自动禁用」
+
+---
+
+### 4. 窗口管理
+
+#### 页面功能
+
+展示比特浏览器窗口列表，查看每个窗口的绑定关系和运行状态，数据从比特浏览器 API 同步。
+
+#### UI 布局
+
+- **顶部操作栏**：「🔄 同步窗口列表」按钮 + 状态筛选下拉（全部 / 空闲 / 使用中 / 运行中 / 永久禁用）
+- **主体：窗口列表表格**
+    - 列：状态色标 | 窗口 ID | 窗口名称 | 是否运行中（绿色圆点/灰色圆点）| 绑定账号名（点击可跳转）| 操作（打开窗口 / 关闭窗口）
+    - 永久禁用的窗口整行红色背景
+
+#### 交互逻辑
+
+- **同步窗口列表**：点击「🔄 同步窗口列表」→ 调用比特浏览器 API 获取最新窗口数据 → 与本地库比对后更新 `GET /api/windows`
+- **打开窗口**：调用比特浏览器 `POST /browser/open` → 窗口状态变为「运行中」→ 按钮切换为「关闭窗口」
+- **关闭窗口**：调用比特浏览器 `POST /browser/close` → 窗口状态恢复 → 按钮切换为「打开窗口」
+- **级联禁用**：同代理管理，被级联禁用时 Toast 提示
+
+---
+
+### 5. 养号任务
+
+#### 页面功能
+
+查看和管理所有账号的养号任务，按天展示任务清单，支持手动触发执行、查看执行结果和日志，以及确认人工待办。
+
+#### UI 布局
+
+- **顶部操作栏**：日期选择器（默认今日）+ 账号筛选下拉 + 任务状态筛选（全部 / 待执行 / 执行中 / 已完成 / 失败 / 人工待办）+ 调度器状态指示灯（运行中 🟢 / 已暂停 🔴）+ 「暂停调度」/「恢复调度」按钮
+- **主体：任务列表表格**
+    - 列：账号名 | Day N | 任务内容 | 任务类型标签（🤖 自动 / ✋ 人工 / 🔄 每日）| 状态 | 重试次数 | 执行时间 | 操作
+    - 人工待办任务行以黄色背景区分，显示「⚠️ 需手动完成」
+    - 失败任务行以红色文字标注
+- **底部展开区（执行日志）**：点击任务行展开，显示该任务的详细执行日志
+    - 每条日志含：时间戳 | 行为模块 ID | 级别色标 | 日志内容
+
+#### 交互逻辑
+
+- **切换日期**：选择日期后重新加载 `GET /api/tasks/today?date=YYYY-MM-DD`，展示该日所有任务
+- **手动触发单账号任务**：点击操作栏「▶️ 立即执行」→ 调用 `POST /api/tasks/{account_id}/run` → 按钮变为 loading → 实时更新任务状态
+- **确认人工待办**：点击「✅ 确认完成」→ 调用 `POST /api/tasks/{task_id}/complete` → 任务状态变为「已完成」
+- **暂停/恢复调度**：点击后调用 `POST /api/scheduler/pause` 或 `/resume` → 调度器状态指示灯切换 → 暂停期间不生成新任务
+- **查看调度器状态**：调用 `GET /api/scheduler/status`，页面右上角持续显示状态
+
+**养号任务模板（Day 1–15+，对应 SOP）：**
+
+| Day | 一次性配置任务（✋ 人工 / 🤖 自动） | 每日行为任务（🤖 RPA 自动） | 在线时长 |
+| --- | --- | --- | --- |
+| 1 | 🤖 首次登录检测 | 浏览 Feed（仅滚动，禁点赞） | 30–60 min |
+| 2 | 🤖 隐私设置→仅好友 | Feed + 点赞 ≤5 | 30–120 min |
+| 3 | 🤖 上传头像+封面、OAuth: Canva | Feed + 点赞 ≤8 + 加好友 5–8 | 30–120 min |
+| 4 | 🤖 填现居城市、OAuth: [Change.org](http://Change.org) | Feed + Stories + 加好友 5–8 | 30–120 min |
+| 5 | 🤖 填家乡、注册 Instagram 关联、开启 2FA | Feed + Reels + Stories + 加好友 5–8 | 30–120 min |
+| 6 | 🤖 填生日、信任联系人、下载副本、OAuth: Spotify、加群 2–3 | Feed + Reels + Stories + 加好友 5–8 | 30–120 min |
+| 7 | 🤖 填性别、语言 | Feed + Reels + Stories + 评论 1–2 + 加好友 5–8 | 30–120 min |
+| 8 | 🤖 填工作单位、创建 Fanpage、删快捷链接、OAuth: Pinterest | 同 Day 7 | 30–120 min |
+| 9 | ✋ 填学校、绑定 BM、创建广告账户（沉淀） | 同 Day 7 | 30–120 min |
+| 10 | 🤖 填简介、OAuth: Eventbrite、验证域名、主页发帖 ≤3 | Feed + Reels + Stories + 评论 3–5 + 加好友 5–8 | 30–120 min |
+| 11 | 🤖 填感情+网站、Fanpage 发帖、安装 Pixel | 同 Day 10，评论 3–5 | 30–120 min |
+| 12 | 🤖 确认域名 Verified + Pixel 回传 | 同 Day 10 | 30–120 min |
+| 13 | ✋ 检查 BM 额度、绑定付款方式 | 同 Day 10 | 30–120 min |
+| 14 | ✋ 创建第 1 个广告系列，预算从 $2 起 | 同 Day 10，加好友升至 10–20 | 30–120 min |
+| 15+ | ✋ 持续投放期维护 | 同 Day 10，每周检查广告数据 | 30–120 min |
+
+**任务执行区分规则：**
+
+- **一次性配置任务**（`task_type=once`）：执行成功后标记 `done`，后续生成任务时跳过
+- **每日行为任务**（`task_type=daily`）：每天重新生成新实例，独立记录执行结果
+- **人工待办任务**（`task_type=manual`）：系统仅生成提醒条目，Dashboard 以待办卡片展示，用户手动确认完成
+
+---
+
+### 6. 广告账户
+
+#### 页面功能
+
+管理 BM（Business Manager）、广告账户、Fanpage、Pixel 等广告相关资产，记录额度层级与投放状态。
+
+#### UI 布局
+
+- **顶部 Tab 切换**：BM 管理 | 广告账户 | Fanpage（三个子 Tab，切换表格内容）
+- **BM 管理 Tab**
+    - 列：BM ID | 归属 FB 账号 | 地区 | 状态 | 包含广告账户数 | 操作（编辑 / 查看详情）
+- **广告账户 Tab**
+    - 列：广告账户 ID | 归属 BM | 额度层级（$100 / $350 / $450 / $1500 / 无限）| 付款方式 | 投放状态（活跃/暂停/已结束）| 操作
+- **Fanpage Tab**
+    - 列：Page ID | 主页名称 | 归属 FB 账号 | 状态 | 内容发布状态
+
+#### 交互逻辑
+
+- **新增 BM**：点击「+ 新增 BM」→ 表单（BM ID、归属 FB 账号下拉选择、地区）→ `POST /api/bm`
+- **新增广告账户**：点击「+ 新增广告账户」→ 表单（广告账户 ID、归属 BM 下拉、额度层级、付款方式）→ `POST /api/ad-accounts`
+- **更新额度/状态**：行内编辑或点击「编辑」→ `PATCH /api/ad-accounts/{id}`
+- **预算递增记录**（后期扩展）：广告账户详情面板中展示递增历史（$2 → $10 → $25，间隔 ≥3 天），系统记录每次递增时间和依据
+
+**核心约束规则（来自 SOP）：**
+
+<aside>
+⚠️
+
+- 不停止正在投放中的广告
+- 不在同一时间开启第二个广告系列
+- 每次预算递增必须有数据稳定依据，系统记录递增历史
+</aside>
+
+---
+
+### 7. 语料库 & 素材
+
+#### 页面功能
+
+管理 RPA 自动化过程中使用的评论语料和头像素材，确保评论不重复、头像不复用。
+
+#### UI 布局
+
+- **顶部 Tab 切换**：评论语料库 | 头像素材库
+- **评论语料库 Tab**
+    - 顶部：「+ 新增语料」按钮 + 语言筛选（en / 其他）+ 分类筛选
+    - 列表：语料内容 | 语言 | 分类 | 使用次数 | 最近使用时间 | 操作（编辑 / 删除）
+- **头像素材库 Tab**
+    - 顶部：「📤 上传头像」按钮（支持多选上传）+ 类型筛选（头像 / 封面）+ 使用状态筛选
+    - 网格展示：缩略图 + 使用状态标签（未使用 🟢 / 已使用 🔴 + 被哪个账号使用）
+
+#### 交互逻辑
+
+- **新增评论语料**：点击「+ 新增语料」→ 表单（内容、语言、分类）→ `POST /api/comments`
+- **删除评论语料**：点击「删除」→ 确认弹窗 → `DELETE /api/comments/{id}`
+- **上传头像**：点击「📤 上传头像」→ 文件选择器（支持多选 jpg/png）→ `POST /api/avatars/upload`（multipart/form-data）
+- **查看头像使用情况**：点击缩略图 → 弹窗显示大图 + 被使用的账号名（点击可跳转账号详情）
+- **防重复机制**：评论语料通过 `use_count` 追踪使用频率，RPA 选取时优先选使用次数最低的；头像通过 `is_used` 字段防止多账号使用同一头像
+
+---
+
+### 8. 日志查看
+
+#### 页面功能
+
+系统全量操作日志的查询与浏览，支持按账号、日期、级别多维度筛选，便于排查问题和追溯操作记录。
+
+#### UI 布局
+
+- **顶部筛选栏**：账号下拉 + 日期范围选择器 + 日志级别多选（🔵 INFO / 🟡 WARN / 🔴 ERROR / ⛔ CRITICAL）+ 行为类型筛选 + 搜索框（日志内容模糊搜索）
+- **主体：日志列表**
+    - 列：时间戳 | 账号名 | 关联任务 ID | 行为模块（如 `rpa.scroll_feed`）| 级别色标 | 日志内容
+    - 级别色标统一：INFO 蓝 / WARN 黄 / ERROR 红 / CRITICAL 红底白字
+    - 支持无限滚动加载
+- **右侧快捷面板**：点击日志行后展开，显示完整日志详情（含 result_log 原始数据）
+
+#### 交互逻辑
+
+- **筛选查询**：修改任一筛选条件 → 自动触发 `GET /api/logs?account_id=&level=&date=&action_type=&keyword=` → 更新列表
+- **导出日志**（后期扩展）：「📥 导出 CSV」按钮 → 将当前筛选结果导出为 CSV 文件
+- **跳转关联**：点击日志中的账号名 → 跳转账号详情；点击任务 ID → 跳转养号任务页对应任务
+
+**日志分级规则：**
+
+| 级别 | 触发场景 | 处置方式 |
+| --- | --- | --- |
+| 🔵 INFO | 正常 RPA 操作完成、任务启动/结束 | 写库，UI 可查 |
+| 🟡 WARN | 操作超时、页面元素异常、未完成目标次数 | 写库 + UI 黄色标注 |
+| 🔴 ERROR | 账号触发验证、登录失败、RPA 脚本崩溃 | 写库 + UI 红色告警 + 暂停该账号任务 |
+| ⛔ CRITICAL | 账号被封禁（Disabled）、IP 被封 | 写库 + UI 醒目告警 + 自动触发状态级联 |
+
+---
+
+## 三、全局交互说明
+
+### 3.1 导航结构
+
+- **左侧固定导航栏**：垂直排列 8 个页面入口（Dashboard / 账号管理 / 代理管理 / 窗口管理 / 养号任务 / 广告账户 / 语料&素材 / 日志查看），当前页面高亮
+- **顶部状态栏**：右上角显示——调度器状态（🟢 运行中 / 🔴 已暂停）+ 未处理告警角标 + 系统时间
+- **所有列表页统一交互**：顶部筛选 → 主体表格 → 点击行展开详情/滑出面板
+
+**前端路由表：**
+
+| 路径 | 页面 | 对应组件模板 |
+| --- | --- | --- |
+| `/` | 总览 Dashboard | dashboard.html |
+| `/accounts` | 账号管理 | accounts.html |
+| `/proxies` | 代理管理 | proxies.html |
+| `/windows` | 窗口管理 | windows.html |
+| `/tasks` | 养号任务 | tasks.html |
+| `/ads` | 广告账户 | ads.html |
+| `/assets` | 语料库 & 素材 | assets.html |
+| `/logs` | 日志查看 | logs.html |
+
+### 3.2 状态色标体系
+
+> 全系统统一，保证视觉一致性：
+> 
+
+| 状态 | 色标 | 适用对象 |
+| --- | --- | --- |
+| 待养号 | 🔵 蓝色 | FB 账号 |
+| 养号中 | 🟡 黄色 | FB 账号 |
+| 养号就绪 | 🟢 绿色 | FB 账号 |
+| 投放养号中 | 🟢✨ 绿色+星标 | FB 账号 |
+| 异常 | 🟠 橙色 | FB 账号 |
+| 已封禁 / 永久禁用 | 🔴 红色背景 + 「禁用」标签 | FB 账号 / 代理 IP / 浏览器窗口 |
+| 空闲 | 🟢 绿色 | 代理 IP / 浏览器窗口 |
+| 使用中 | 🔵 蓝色 | 代理 IP / 浏览器窗口 |
+
+### 3.3 状态级联规则
+
+当 FB 个人号状态变为「已封禁」时，系统自动执行：
+
+1. 将其关联的代理 IP 状态改为「永久禁用」
+2. 将其关联的比特浏览器窗口状态改为「永久禁用」
+3. 在所有列表中以红色背景 + 「禁用」标签显示被级联的资产
+4. 生成 CRITICAL 级别日志
+5. Dashboard 弹出 Toast 告警
+
+### 3.4 养号调度安全机制
+
+- **禁止目标地区凌晨操作**：每个 FB 账号绑定 `target_timezone`（如 `America/New_York`），调度器在生成任务时将执行时间窗口转换为该时区，确保 **02:00–05:00 当地时间不执行任何 RPA 任务**
+- **多账号间隔启动**：账号间随机间隔 **5–15 分钟**，避免同时启动多个窗口
+- **RPA 人类模拟延迟**：每个 RPA 动作间随机插入 **2–8 秒**延迟
+
+**调度时间窗口算法（伪代码）：**
+
+```python
+# 1. 获取账号目标时区的当前时间
+target_now = now_in(account.target_timezone)
+
+# 2. 判断是否处于静默窗口（目标地区 02:00-05:00）
+if 2 <= target_now.hour < 5:
+    skip("目标地区凌晨静默期，跳过")
+
+# 3. 计算可用执行窗口（目标时区 08:00-22:00）
+window_start = target_tz_to_local("08:00", account.target_timezone)
+window_end   = target_tz_to_local("22:00", account.target_timezone)
+
+# 4. 在可用窗口内随机选取执行时刻
+exec_time = random_time_between(window_start, window_end)
+
+# 5. 多账号排序：按 exec_time 排序，相邻账号间强制间隔 5-15 min
+for account in sorted_accounts:
+    if (account.exec_time - prev_account.exec_time) < 5min:
+        account.exec_time = prev_account.exec_time + random(5, 15) min
+```
+
+> **约束优先级**：静默窗口（硬红线）> 可用窗口 > 多账号间隔。若可用窗口被静默窗口完全覆盖（理论上不会，08:00-22:00 与 02:00-05:00 不重叠），则当日跳过该账号。
+> 
+- **单账号单日失败熔断**：同一账号当日任务失败 ≥ 3 次（`retry_count` 追踪），自动标记「异常」并停止当日任务，发送告警
+
+### 3.5 异常检测规则
+
+- 登录后检测到「账号被要求验证手机号/邮箱」→ 触发 WARN，暂停自动化，等待人工处理
+- 连续 3 天登录失败 → 触发 ERROR，账号标记「异常」
+- 检测到「Account Disabled」页面 → 触发 CRITICAL，执行状态级联
+
+### 3.6 数据安全规则
+
+- 账号密码、邮箱密码、代理密码、TOTP 密钥在 SQLite 中 **AES/Fernet 加密存储**
+- 系统仅监听 `127.0.0.1`，不对外暴露端口
+- 不记录任何付款卡号完整信息
+
+### 3.7 错误处理与边界 Case
+
+| 场景 | 触发条件 | 系统行为 |
+| --- | --- | --- |
+| **绑定代理时代理已被占用** | 用户尝试将已绑定其他账号的代理 IP 绑定到新账号 | 弹窗提示「该代理已被账号 xxx 占用，请先解绑或选择其他代理」，绑定面板仅展示状态为「空闲」的代理 |
+| **新增账号用户名重复** | 提交新增账号时，`username` 已存在于数据库 | API 返回 409 Conflict，前端提示「该用户名已存在，请检查是否重复录入」，不写入数据库 |
+| **养号执行中系统崩溃/重启** | RPA 任务执行到一半，系统非正常退出 | 系统重启后 APScheduler 恢复任务队列；已执行的原子动作通过 `action_logs` 回溯；`nurture_tasks` 中状态为 `running` 的任务标记为 `interrupted`，Dashboard 显示「⚠️ 中断恢复」标签，用户可选择「重新执行」或「跳过当日」 |
+| **比特浏览器未启动** | 调度器尝试调用 BitBrowser API 时连接 127.0.0.1:54345 失败 | 触发 ERROR 日志「比特浏览器未运行」，暂停所有 RPA 任务，Dashboard 顶部显示红色横幅「⛔ 比特浏览器未检测到，请先启动」 |
+| **代理 IP 连接超时** | Playwright 通过代理发起请求，30 秒内无响应 | 该账号当次任务标记失败，`retry_count + 1`，日志记录 WARN「代理 xxx 连接超时」，不影响其他账号 |
+| **SQLite 数据库文件锁定** | 多线程同时写入导致 `database is locked` | WAL 模式 + 写入队列缓冲；若仍失败，重试 3 次，间隔 1 秒；超过重试上限写入 Python logging 文件（兜底） |
+| **评论语料库为空** | RPA 需要执行 `comment_post` 但语料库无可用条目 | 跳过评论动作，日志记录 WARN「评论语料库为空，已跳过评论任务」，其他动作正常执行 |
+| **头像素材全部已用** | 新账号需要上传头像但所有素材 `is_used = true` | 该一次性任务标记 `pending`，Dashboard 显示待办「⚠️ 请上传新头像素材」，不阻塞其他任务 |
+| **删除已绑定的代理/窗口** | 用户尝试删除仍被账号绑定的代理 IP 或窗口 | 弹窗提示「该资产仍被账号 xxx 绑定，请先解绑」，拒绝删除 |
+
+### 3.8 人工待办超时提醒
+
+> 人工待办任务（`task_type=manual`）如果长时间未确认完成，会阻塞养号日历的推进。系统需主动提醒。
+> 
+
+**超时规则：**
+
+- 人工待办生成后 **24 小时内未确认** → Dashboard 该卡片变为橙色背景，标注「⏰ 已超时 1 天」
+- 超过 **48 小时未确认** → 触发 WARN 日志，Dashboard 弹出 Toast「账号 xxx 的 Day N 待办已超时 2 天，养号进度可能受阻」
+- 超过 **72 小时未确认** → 触发 ERROR 日志，该账号的后续自动任务暂停，直到人工待办被确认
+
+**超时不阻塞规则**：每日行为任务（`task_type=daily`）不受人工待办影响，即使待办超时，每日的 Feed 浏览、点赞等行为仍正常执行，保证账号活跃度不下降。仅**一次性配置任务链**受阻——如果 Day 9「绑定 BM」未完成，Day 10 的「验证域名」也不会生成。
+
+---
+
+## 四、产品特色
+
+1. **全资产一站式管理**：FB 个人号、广告账户、代理 IP、比特浏览器窗口四类资产统一界面管理，关联关系一目了然，告别分散在多处的手动记录
+2. **SOP 驱动的养号自动化**：基于 14 天养号 SOP 规则自动生成每日任务，RPA 模拟真人行为执行，人工只需处理少量待办，效率提升 10 倍以上
+3. **状态级联联动**：账号封禁时自动级联禁用关联的代理 IP 和浏览器窗口，从根源杜绝被封资产被误复用
+4. **原子化 RPA 模块**：每个行为（点赞、评论、加好友等）独立封装为原子模块，可自由组合、独立替换，Facebook 页面变化时局部更新即可
+5. **配置化 SOP 管理**：养号规则通过 `config.yaml` 管理而非硬编码，SOP 调整只需改配置文件，不动代码，快速适应策略变化
+
+---
+
+## 五、技术架构
+
+### 5.1 架构总览
+
+```mermaid
+flowchart TD
+    A["Web UI<br>（FastAPI + Jinja2 / Vue）"] --> B["API Gateway Layer<br>（RESTful API）"]
+    B --> C["Core Service Layer"]
+    C --> D["Asset Manager<br>资产管理模块"]
+    C --> E["Nurture Scheduler<br>养号调度模块"]
+    C --> F["Ad Account Manager<br>广告账户模块"]
+    C --> G["Monitor & Logger<br>监控日志模块"]
+    D --> H["SQLite DB"]
+    E --> H
+    F --> H
+    G --> H
+    E --> I["Playwright RPA Engine<br>自动化执行引擎"]
+    I --> J["BitBrowser API<br>比特浏览器"]
+    J --> K["Facebook / 第三方站点"]
+    G --> L["Alert Engine<br>异常告警"]
+```
+
+### 5.2 模块总览
+
+| 模块 | 英文标识 | 核心职责 | 优先级 |
+| --- | --- | --- | --- |
+| 资产管理 | asset-manager | 统一管理 FB 个人号、广告账户、代理 IP、比特浏览器窗口，及相互关联状态 | 🔴 P0 |
+| 养号调度引擎 | nurture-scheduler | 基于 SOP 日历，为每个账号生成每日任务计划并调度执行 | 🔴 P0 |
+| RPA 行为原子模块 | rpa-actions | 封装所有单一行为（滚动、点赞、评论、加好友等），供调度引擎组合调用 | 🔴 P0 |
+| 广告账户管理 | ad-manager | 管理广告账户、BM、Fanpage，记录额度与投放状态 | 🟠 P1 |
+| 监控与日志 | monitor-logger | 记录所有操作日志、账号状态变更、异常事件，提供告警 | 🔴 P0 |
+| 仪表盘 UI | dashboard-ui | 数据可视化展示，手动操作入口，状态总览 | 🟠 P1 |
+
+### 5.3 RPA 行为原子模块清单
+
+| 模块 ID | 行为名称 | 可配置参数 | 说明 |
+| --- | --- | --- | --- |
+| rpa.scroll_feed | 滚动浏览 Feed | duration_min, scroll_speed | 模拟自然滚动，随机停顿 |
+| [rpa.like](http://rpa.like)_post | 点赞帖子 | max_count, target（feed/reels/friend） | 随机选择符合条件的帖子点赞 |
+| rpa.share_post | 转发帖子 | max_count | 随机转发，严格控制频次 |
+| rpa.comment_post | 评论帖子 | max_count, comment_pool | 从语料库随机抽取评论，避免重复 |
+| [rpa.watch](http://rpa.watch)_reels | 观看 Reels | count, min_watch_seconds | 每条 ≥30 秒完整观看，模拟真人停留 |
+| rpa.view_stories | 浏览 Stories | count | 点开快拍，随机回应 |
+| rpa.add_friend | 添加好友 | max_count, target_region | 优先美国本地用户，加前先浏览并点赞 |
+| rpa.visit_profile | 浏览好友主页 | user_url | 添加好友前后的主页浏览行为 |
+| rpa.join_group | 加入群组 | group_url | 仅加入，不发帖，搭配浏览群内容 |
+| [rpa.post](http://rpa.post)_to_timeline | 主页发帖 | content, image_url, max_per_day | ≤3 条/天，禁广告词与外链 |
+| rpa.update_profile | 更新个人资料 | field, value | 分批更新，每次仅修改一个字段 |
+| rpa.oauth_login | 第三方 OAuth 登录 | target_site（canva/spotify/pinterest...） | 通过 FB 登录第三方，提升信任度 |
+| rpa.upload_avatar | 上传头像/封面 | image_path | 本地图片路径，支持批量预置 |
+| rpa.enable_2fa | 开启双重验证 | method（totp/sms） | 配合 Google Authenticator |
+| rpa.check_status | 健康检查 | - | 登录并检查是否被要求验证，返回状态码 |
+
+### 5.4 技术栈选型
+
+| 层级 | 技术选型 | 选型理由 |
+| --- | --- | --- |
+| 后端框架 | Python + FastAPI | 轻量、异步支持好，Playwright 生态完善 |
+| 前端 | Jinja2 模板 + Tailwind CSS（初期） | 与 FastAPI 原生集成，开发快；后期可升级 Vue |
+| 数据库 | SQLite + SQLAlchemy ORM | 本地运行，零运维，结构化存储足够 |
+| 自动化引擎 | Playwright（Python） | 支持 Chromium，与比特浏览器 CDP 接口对接 |
+| 比特浏览器集成 | BitBrowser REST API（本地 127.0.0.1:54345） | 官方 API，负责窗口开关与 CDP 端口获取 |
+| 日志存储 | SQLite（action_logs 表）+ Python logging | 统一落库，UI 可查，调试方便 |
+| 配置管理 | python-dotenv + config.yaml | 敏感信息走环境变量，业务配置走 yaml |
+
+**比特浏览器集成方式与 API 详情：**
+
+1. 调用 BitBrowser API `POST /browser/open` 启动指定窗口，获取 CDP WebSocket 地址
+2. Playwright 通过 `connect_over_cdp()` 接管该浏览器实例
+3. 执行 RPA 任务后调用 `POST /browser/close` 关闭窗口（保持登录状态，不退出账号）
+
+**关键 API 调用示例（基址 `http://127.0.0.1:54345`）：**
+
+```python
+# === 1. 启动浏览器窗口 ===
+# POST /browser/open/profileId
+import requests
+
+open_resp = requests.post(
+    "http://127.0.0.1:54345/browser/open/profileId",
+    json={
+        "profileId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",  # 比特浏览器窗口 ID
+        "args": [],            # 启动参数（可选）
+        "loadExtensions": True  # 是否加载扩展
+    }
+)
+# 响应示例：
+# {
+#     "success": true,
+#     "data": {
+#         "ws": "ws://127.0.0.1:xxxxx/devtools/browser/yyy",  <- CDP WebSocket
+#         "http": "http://127.0.0.1:xxxxx"  <- CDP HTTP 端点
+#     }
+# }
+
+# === 2. Playwright 接管 ===
+from playwright.async_api import async_playwright
+
+async with async_playwright() as p:
+    browser = await p.chromium.connect_over_cdp(open_resp.json()["data"]["ws"])
+    context = browser.contexts[0]
+    page = context.pages[0] if context.pages else await context.new_page()
+    # ... 执行 RPA 动作 ...
+
+# === 3. 关闭浏览器窗口 ===
+# POST /browser/close/profileId
+close_resp = requests.post(
+    "http://127.0.0.1:54345/browser/close/profileId",
+    json={
+        "profileId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    }
+)
+# 响应：{"success": true, "data": {}}
+
+# === 4. 获取窗口列表（同步用） ===
+# POST /browser/list
+list_resp = requests.post(
+    "http://127.0.0.1:54345/browser/list",
+    json={"page": 0, "pageSize": 100}
+)
+# 响应示例：
+# {
+#     "success": true,
+#     "data": {
+#         "list": [{"id": "xxx", "name": "Window 1", "remark": "..."}],
+#         "totalNum": 10
+#     }
+# }
+```
+
+> ⏳ 完整 API 参考：[⿻ 比特浏览器 API 文档](https://doc2.bitbrowser.cn/jiekou.html)。以上示例为核心调用，`browser_client.py` 适配层应封装这些调用并统一处理错误 / 重试 / 超时。
+> 
+
+---
+
+## 六、数据模型
+
+```mermaid
+erDiagram
+    fb_accounts {
+        int id PK
+        string username
+        string password_encrypted
+        string email
+        string email_password_encrypted
+        string region
+        string target_timezone
+        string status
+        int browser_window_id FK
+        int proxy_id FK
+        int nurture_day
+        date nurture_start_date
+        string totp_secret_encrypted
+        datetime created_at
+        datetime last_active_at
+        text notes
+    }
+    browser_windows {
+        int id PK
+        string bit_window_id
+        string name
+        string status
+    }
+    proxy_ips {
+        int id PK
+        string host
+        int port
+        string username
+        string password
+        string region
+        string type
+        string status
+    }
+    bm_accounts {
+        int id PK
+        int fb_account_id FK
+        string bm_id
+        string region
+        string status
+    }
+    ad_accounts {
+        int id PK
+        int bm_id FK
+        string ad_account_id
+        string spending_limit
+        string payment_method
+        string status
+    }
+    fanpages {
+        int id PK
+        int fb_account_id FK
+        string page_id
+        string page_name
+        string status
+    }
+    nurture_tasks {
+        int id PK
+        int fb_account_id FK
+        int day_number
+        date scheduled_date
+        string task_type
+        string execution_type
+        string status
+        int retry_count
+        text result_log
+        datetime executed_at
+    }
+    action_logs {
+        int id PK
+        int fb_account_id FK
+        int task_id FK
+        string action_type
+        string level
+        text message
+        datetime created_at
+    }
+    comment_pool {
+        int id PK
+        string content
+        string language
+        string category
+        int use_count
+        datetime last_used_at
+    }
+    avatar_assets {
+        int id PK
+        string file_path
+        string type
+        bool is_used
+        int used_by_account_id FK
+    }
+    fb_accounts ||--|| browser_windows : "绑定"
+    fb_accounts ||--|| proxy_ips : "绑定"
+    fb_accounts ||--o| bm_accounts : "1:1"
+    fb_accounts ||--o{ fanpages : "1:N"
+    bm_accounts ||--o{ ad_accounts : "1:N"
+    fb_accounts ||--o{ nurture_tasks : "1:N"
+    nurture_tasks ||--o{ action_logs : "1:N"
+    fb_accounts ||--o| avatar_assets : "使用"
+```
+
+> **关键字段说明：**
+> 
+
+> - `fb_accounts.target_timezone`：目标地区时区，用于调度安全时间窗口转换
+> 
+
+> - `fb_accounts.nurture_start_date`：养号开始日期，`nurture_day = today - nurture_start_date`
+> 
+
+> - `fb_accounts.totp_secret_encrypted`：2FA TOTP 密钥加密存储
+> 
+
+> - `nurture_tasks.execution_type`：`once` / `daily` / `manual`
+> 
+
+> - `nurture_tasks.retry_count`：当日重试次数，≥3 触发异常
+> 
+
+> - `comment_pool`：含语言标签和使用计数，避免重复评论
+> 
+
+> - `avatar_assets`：记录使用状态，防止多账号用同一头像
+> 
+
+**预留表：广告投放数据（Phase 3 启用）：**
+
+```sql
+CREATE TABLE ad_daily_stats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ad_account_id INTEGER NOT NULL REFERENCES ad_accounts(id),
+    date DATE NOT NULL,
+    spend REAL DEFAULT 0,           -- 当日消耗（USD）
+    impressions INTEGER DEFAULT 0,  -- 展示次数
+    clicks INTEGER DEFAULT 0,       -- 点击次数
+    conversions INTEGER DEFAULT 0,  -- 转化次数
+    cpm REAL DEFAULT 0,             -- 千次展示成本
+    cpc REAL DEFAULT 0,             -- 单次点击成本
+    ctr REAL DEFAULT 0,             -- 点击率
+    cvr REAL DEFAULT 0,             -- 转化率
+    roas REAL DEFAULT 0,            -- 广告支出回报率
+    cpp REAL DEFAULT 0,             -- 单粉成本
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(ad_account_id, date)     -- 每个广告账户每天一条
+);
+
+CREATE TABLE budget_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ad_account_id INTEGER NOT NULL REFERENCES ad_accounts(id),
+    old_budget REAL NOT NULL,       -- 旧预算
+    new_budget REAL NOT NULL,       -- 新预算
+    reason TEXT,                    -- 递增依据（如“ROAS 稳定 3 天”）
+    changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+> 该表 Phase 1–2 时不建表，Phase 3 广告管理模块启动时通过 Alembic migration 创建，避免早期重复设计。
+> 
+
+---
+
+## 七、API 接口清单
+
+### 资产管理
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | /api/accounts | 账号列表（含状态、Day N、绑定信息） |
+| POST | /api/accounts | 新增 FB 账号 |
+| PATCH | /api/accounts/{id} | 修改账号信息 / 手动改状态 |
+| DELETE | /api/accounts/{id} | 删除账号（软删除） |
+| POST | /api/accounts/{id}/bind | 绑定浏览器窗口 + 代理 IP |
+| GET | /api/proxies | 代理 IP 列表 |
+| POST | /api/proxies | 新增代理 IP |
+| PATCH | /api/proxies/{id} | 修改代理信息 / 手动改状态 |
+| GET | /api/windows | 比特浏览器窗口列表 |
+
+### 养号调度
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | /api/tasks/today | 今日所有账号任务列表 |
+| GET | /api/tasks/{account_id} | 指定账号的任务历史 |
+| POST | /api/tasks/{account_id}/run | 立即触发指定账号今日任务 |
+| POST | /api/tasks/{task_id}/complete | 手动确认人工待办已完成 |
+| GET | /api/scheduler/status | 调度器运行状态 |
+| POST | /api/scheduler/pause | 暂停所有自动调度 |
+| POST | /api/scheduler/resume | 恢复调度 |
+
+### 广告账户
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | /api/bm | BM 列表 |
+| POST | /api/bm | 新增 BM |
+| GET | /api/ad-accounts | 广告账户列表 |
+| POST | /api/ad-accounts | 新增广告账户 |
+| PATCH | /api/ad-accounts/{id} | 更新额度 / 状态 |
+
+### 监控与日志
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | /api/logs | 日志列表（支持 ?account_id= &level= &date= 筛选） |
+| GET | /api/alerts | 未处理告警列表 |
+| POST | /api/alerts/{id}/dismiss | 确认并关闭告警 |
+
+### 素材管理
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | /api/comments | 评论语料列表 |
+| POST | /api/comments | 新增评论语料 |
+| DELETE | /api/comments/{id} | 删除语料 |
+| POST | /api/avatars/upload | 上传头像素材（multipart/form-data） |
+| GET | /api/avatars | 头像素材列表及使用状态 |
+
+---
+
+## 八、非功能性需求
+
+### 8.1 性能
+
+- 单次养号任务（30–120 分钟）：系统调度延迟 < 5 秒
+- 多账号并发上限：≤ 5 个同时运行（受限本地 PC 性能，可配置）
+- 日志写入延迟：< 1 秒
+
+### 8.2 稳定性
+
+- 单账号 RPA 崩溃不影响其他账号执行
+- 系统重启后 APScheduler 自动恢复待执行任务
+- 所有数据库写入使用事务，防止数据丢失
+
+### 8.3 安全
+
+- 密码类字段 AES/Fernet 加密存储
+- 仅监听 `127.0.0.1`，不对外暴露
+- 不记录付款卡号完整信息
+
+### 8.4 可维护性
+
+- SOP 规则通过 `config.yaml` 管理，不硬编码
+- RPA 原子模块通过统一接口注册，新增行为只需新增文件
+- 提供完整 `README.md` 与模块注释，方便 Trae AI 理解代码结构
+
+### 8.5 数据备份与恢复
+
+> SQLite 单文件存储，磁盘损坏或误删将导致所有账号密码和养号进度丢失，必须有备份机制。
+> 
+- **自动备份**：系统每日首次启动时，自动将 `fbmanager.db` 复制到 `backups/` 目录，文件名格式：`fbmanager_YYYYMMDD_HHmmss.db`
+- **保留策略**：保留最近 **30 份**备份，超出自动删除最旧的（FIFO）
+- **手动备份**：Dashboard 底部提供「💾 立即备份」按钮，点击后立即生成一份备份
+- **恢复方式**：停止系统→将备份文件重命名为 `fbmanager.db` 替换原文件→重启系统（README 中写明步骤）
+- **备份内容**：仅 SQLite 数据库文件，不含头像/素材文件（体积大，可手动备份 `assets/` 目录）
+
+### 8.6 日志保留与清理
+
+> `action_logs` 表会随运行时间持续膨胀，需定期清理。
+> 
+- **保留周期**：INFO 日志保留 **30 天**，WARN/ERROR/CRITICAL 保留 **90 天**
+- **清理时机**：每日首次启动时（备份完成后）自动执行清理
+- **清理方式**：`DELETE FROM action_logs WHERE level = 'INFO' AND created_at < date('now', '-30 days')`，类似处理 WARN/ERROR/CRITICAL
+- **可配置**：保留天数在 `config.yaml` 中配置，不硬编码
+- **导出兆底**：清理前可选将待删除日志导出为 CSV 归档（Phase 3 实现）
+
+---
+
+## 九、项目目录结构
+
+```jsx
+FBManager/
+├── main.py                     # FastAPI 入口，注册路由 + 启动 APScheduler
+├── config.yaml                 # 业务配置（SOP 规则、调度参数等）
+├── .env                        # 敏感配置（加密密钥等），不提交 Git
+├── requirements.txt
+├── README.md
+│
+├── core/
+│   ├── scheduler.py            # APScheduler 初始化与任务注册
+│   ├── cascade.py              # 状态级联逻辑
+│   └── crypto.py               # 加密/解密工具（Fernet）
+│
+├── modules/
+│   ├── asset/                  # 资产管理模块
+│   │   ├── models.py
+│   │   ├── schemas.py
+│   │   ├── service.py
+│   │   └── router.py
+│   │
+│   ├── nurture/                # 养号调度引擎
+│   │   ├── models.py
+│   │   ├── schemas.py
+│   │   ├── service.py
+│   │   ├── router.py
+│   │   └── sop_loader.py       # 从 config.yaml 加载 SOP 任务模板
+│   │
+│   ├── rpa/                    # RPA 行为原子模块
+│   │   ├── base.py             # 抽象基类 + 注册表
+│   │   ├── browser_client.py   # BitBrowser API 适配层
+│   │   ├── executor.py         # RPA 执行引擎
+│   │   └── actions/
+│   │       ├── scroll_feed.py
+│   │       ├── like_post.py
+│   │       ├── watch_reels.py
+│   │       ├── view_stories.py
+│   │       ├── comment_post.py
+│   │       ├── add_friend.py
+│   │       ├── visit_profile.py
+│   │       ├── join_group.py
+│   │       ├── post_timeline.py
+│   │       ├── update_profile.py
+│   │       ├── oauth_login.py
+│   │       ├── upload_avatar.py
+│   │       ├── enable_2fa.py
+│   │       └── check_status.py
+│   │
+│   ├── ad/                     # 广告账户管理
+│   │   ├── models.py
+│   │   ├── schemas.py
+│   │   ├── service.py
+│   │   └── router.py
+│   │
+│   └── monitor/                # 监控与日志
+│       ├── models.py
+│       ├── schemas.py
+│       ├── service.py
+│       └── router.py
+│
+├── db/
+│   ├── database.py             # SQLAlchemy engine + session
+│   └── migrations/
+│
+├── templates/                  # Jinja2 HTML 模板
+│   ├── base.html
+│   ├── dashboard.html
+│   ├── accounts.html
+│   ├── proxies.html
+│   ├── windows.html
+│   ├── tasks.html
+│   ├── ads.html
+│   ├── assets.html
+│   └── logs.html
+│
+├── static/
+│   ├── css/
+│   └── js/
+│
+└── assets/
+    ├── avatars/                # 头像素材
+    └── content/                # 发帖素材
+```
+
+### config.yaml 结构示例
+
+> SOP 任务模板、调度参数、清理策略等均通过此文件管理，修改无需动代码。
+> 
+
+```yaml
+# ============================================
+# FBManager 业务配置文件
+# ============================================
+
+# --- 调度器配置 ---
+scheduler:
+  max_concurrent_windows: 5          # 最大同时运行窗口数
+  account_interval_min: 5            # 账号间最小间隔（分钟）
+  account_interval_max: 15           # 账号间最大间隔（分钟）
+  silent_hours_start: 2              # 目标时区静默开始（小时，24h制）
+  silent_hours_end: 5                # 目标时区静默结束
+  active_window_start: 8             # 目标时区活跃窗口开始
+  active_window_end: 22              # 目标时区活跃窗口结束
+  retry_max_per_day: 3               # 单账号单日最大重试次数
+
+# --- RPA 全局参数 ---
+rpa:
+  action_delay_min: 2                # 动作间最小延迟（秒）
+  action_delay_max: 8                # 动作间最大延迟（秒）
+  page_load_timeout: 30              # 页面加载超时（秒）
+  proxy_timeout: 30                  # 代理连接超时（秒）
+
+# --- 养号 SOP 任务模板 ---
+nurture_sop:
+  - day: 1
+    once_tasks:
+      - action: check_status
+        type: auto
+    daily_tasks:
+      - action: scroll_feed
+        params: {duration_min: 30, scroll_speed: normal}
+    online_minutes: {min: 30, max: 60}
+
+  - day: 2
+    once_tasks:
+      - action: update_profile
+        type: auto
+        params: {field: privacy, value: friends_only}
+    daily_tasks:
+      - action: scroll_feed
+        params: {duration_min: 30}
+      - action: like_post
+        params: {max_count: 5, target: feed}
+    online_minutes: {min: 30, max: 120}
+
+  - day: 3
+    once_tasks:
+      - action: upload_avatar
+        type: auto
+        params: {type: both}
+      - action: oauth_login
+        type: auto
+        params: {target_site: canva}
+    daily_tasks:
+      - action: scroll_feed
+        params: {duration_min: 30}
+      - action: like_post
+        params: {max_count: 8, target: feed}
+      - action: add_friend
+        params: {max_count: 8, target_region: US}
+    online_minutes: {min: 30, max: 120}
+
+  # ... Day 4-14 同理结构，完整内容参考养号任务模板表 ...
+
+  - day: 9
+    once_tasks:
+      - action: update_profile
+        type: manual              # ← 人工待办
+        params: {field: school}
+      - action: bind_bm
+        type: manual
+      - action: create_ad_account
+        type: manual
+    daily_tasks:
+      - action: scroll_feed
+        params: {duration_min: 30}
+      - action: like_post
+        params: {max_count: 8}
+      - action: watch_reels
+        params: {count: 5, min_watch_seconds: 30}
+      - action: comment_post
+        params: {max_count: 2}
+      - action: add_friend
+        params: {max_count: 8, target_region: US}
+    online_minutes: {min: 30, max: 120}
+
+  - day: 15
+    is_default: true               # Day 15+ 默认模板，无限循环
+    once_tasks:
+      - action: weekly_ad_review
+        type: manual
+    daily_tasks:
+      - action: scroll_feed
+        params: {duration_min: 30}
+      - action: like_post
+        params: {max_count: 10}
+      - action: watch_reels
+        params: {count: 5, min_watch_seconds: 30}
+      - action: view_stories
+        params: {count: 5}
+      - action: comment_post
+        params: {max_count: 5}
+      - action: add_friend
+        params: {max_count: 20, target_region: US}
+    online_minutes: {min: 30, max: 120}
+
+# --- 人工待办超时 ---
+manual_task_timeout:
+  warn_hours: 24                     # 橙色提醒
+  alert_hours: 48                    # WARN 日志 + Toast
+  block_hours: 72                    # ERROR + 暂停后续一次性任务
+
+# --- 日志清理 ---
+log_retention:
+  info_days: 30                      # INFO 保留天数
+  warn_error_days: 90                # WARN/ERROR/CRITICAL 保留天数
+
+# --- 备份 ---
+backup:
+  max_backups: 30                    # 最大保留备份数
+  backup_dir: "backups/"             # 备份目录
+```
+
+---
+
+## 十、开发路线图
+
+### Phase 1 — MVP（2 周内跑通核心链路）
+
+- [ ]  项目脚手架搭建（FastAPI + SQLite + Playwright 环境验证）
+- [ ]  资产管理模块：FB 账号 / 代理 / 浏览器窗口增删改查与绑定
+- [ ]  比特浏览器 API 集成：开关窗口 + CDP 接管
+- [ ]  基础 RPA 模块：`scroll_feed` / `like_post` / `watch_reels` / `check_status`
+- [ ]  养号调度引擎：Day 1–7 任务模板 + APScheduler 定时触发
+- [ ]  日志模块：操作日志写库 + UI 列表展示
+- [ ]  基础 Dashboard：账号列表 + 状态显示 + 手动触发任务
+
+### Phase 2 — 完整养号（3 周内覆盖全 SOP）
+
+- [ ]  RPA 模块补全：`add_friend` / `comment_post` / `join_group` / `post_to_timeline` / `oauth_login` / `update_profile`
+- [ ]  养号任务模板扩展至 Day 8–15+
+- [ ]  账号状态级联逻辑
+- [ ]  异常检测与自动停止机制
+- [ ]  评论语料库管理
+- [ ]  头像素材库管理
+
+### Phase 3 — 广告管理与监控（4–5 周）
+
+- [ ]  广告账户 / BM / Fanpage / Pixel 管理模块
+- [ ]  投放数据记录（手动录入 + 统计看板）
+- [ ]  告警系统完善（UI 弹窗 + 声音提示）
+- [ ]  数据导出（CSV）
+- [ ]  多账号并发控制与优先级队列
+
+### Phase 4 — 扩展迭代（按业务需要）
+
+- [ ]  广告投放自动化（创建广告系列、预算递增自动化）
+- [ ]  账号健康度评分系统
+- [ ]  SOP 规则可视化编辑器
+- [ ]  批量账号导入（CSV）
+
+---
+
+## 十一、风险与约束
+
+| 风险 | 等级 | 缓解措施 |
+| --- | --- | --- |
+| FB 页面结构更新导致 RPA 脚本失效 | 🟠 高 | 原子模块独立封装，局部更新不影响全局；增加元素定位容错 |
+| 比特浏览器 API 版本升级兼容问题 | 🟡 中 | 封装 BitBrowser Client 适配层，API 变更仅需修改适配层 |
+| SQLite 并发写入冲突 | 🟡 中 | 使用 WAL 模式，多账号日志写入加队列缓冲 |
+| 本地 PC 性能瓶颈（多窗口并发） | 🟠 高 | 严格限制同时窗口数 ≤5，可配置；超出排队等待 |
+| Playwright 与 BitBrowser CDP 接口兼容 | 🟡 中 | 开发前先做 POC 验证，锁定比特浏览器版本 |
+
+---
+
+> 📌 **文档版本**：v3.1　　**更新日期**：2026-03-08　　**更新人**：王冠业
+>

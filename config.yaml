@@ -1,0 +1,35 @@
+# FBManager 业务配置
+
+# 调度器配置
+scheduler:
+  max_concurrent_windows: 5  # 最大并发窗口数
+  account_interval_min: 5    # 账号操作最小间隔（分钟）
+  account_interval_max: 15   # 账号操作最大间隔（分钟）
+  silent_hours_start: 2      # 静默期开始时间（小时，24小时制）
+  silent_hours_end: 5        # 静默期结束时间（小时，24小时制）
+  active_window_start: 8     # 活跃期开始时间（小时，24小时制）
+  active_window_end: 22      # 活跃期结束时间（小时，24小时制）
+  retry_max_per_day: 3       # 每日最大重试次数
+
+# RPA 配置
+rpa:
+  action_delay_min: 2        # RPA 操作最小延迟（秒）
+  action_delay_max: 8        # RPA 操作最大延迟（秒）
+  page_load_timeout: 30      # 页面加载超时（秒）
+  proxy_timeout: 30          # 代理连接超时（秒）
+
+# 手动任务超时提醒
+manual_task_timeout:
+  warn_hours: 24             # 警告超时（小时）
+  alert_hours: 48            # 告警超时（小时）
+  block_hours: 72            # 阻断超时（小时）
+
+# 日志保留策略
+log_retention:
+  info_days: 30              # INFO 级别日志保留天数
+  warn_error_days: 90        # WARN/ERROR 级别日志保留天数
+
+# 备份配置
+backup:
+  max_backups: 30            # 最大备份文件数
+  backup_dir: "backups/"     # 备份目录
