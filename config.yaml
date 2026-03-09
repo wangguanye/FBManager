@@ -57,6 +57,52 @@ nurture_sop:
       daily_tasks:
         - { action: "scroll_feed", execution_type: "auto" }
         - { action: "watch_video", execution_type: "auto" }
+    4:
+      online_minutes: 25
+      once_tasks:
+        - { action: "upload_avatar", execution_type: "auto", params: { type: "avatar" } }
+        - { action: "update_profile", execution_type: "auto", params: { field: "city", value: "" } }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 5 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 3 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 3 } }
+    5:
+      online_minutes: 25
+      once_tasks:
+        - { action: "upload_avatar", execution_type: "auto", params: { type: "cover" } }
+        - { action: "update_profile", execution_type: "auto", params: { field: "hometown", value: "" } }
+        - { action: "enable_2fa", execution_type: "auto", params: { method: "totp" } }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 5 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 3 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 3 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 5 } }
+    6:
+      online_minutes: 25
+      once_tasks:
+        - { action: "join_group", execution_type: "auto", params: { max_count: 1 } }
+        - { action: "oauth_login", execution_type: "auto", params: { target_site: "spotify" } }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 5 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 3 } }
+        - { action: "comment_post", execution_type: "auto", params: { max_count: 1 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 5 } }
+    7:
+      online_minutes: 30
+      once_tasks:
+        - { action: "post_to_timeline", execution_type: "auto", params: { content: "从语料库随机", max_per_day: 1 } }
+        - { action: "oauth_login", execution_type: "auto", params: { target_site: "canva" } }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 8 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 5 } }
+        - { action: "comment_post", execution_type: "auto", params: { max_count: 2 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 8 } }
     8:
       online_minutes: 30
       once_tasks:
