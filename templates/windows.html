@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="windowsManager()" x-init="fetchWindows()" class="space-y-6">
+    <!-- 顶部操作栏 -->
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
+        <div class="flex items-center gap-4 w-full sm:w-auto">
+            <button @click="syncWindows()" :disabled="syncing" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg x-show="!syncing" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <svg x-show="syncing" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span x-text="syncing ? '同步中...' : '同步窗口列表'"></span>
+            </button>
+        </div>
+        <!-- 搜索/筛选暂未要求，预留位置 -->
+    </div>
+
+    <!-- 窗口列表表格 -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">比特窗口 ID</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">窗口名称</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                <template x-for="window in windows" :key="window.id">
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.id"></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono" x-text="window.bit_window_id"></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="window.name"></td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span :class="getStatusColor(window.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-opacity-10" x-text="window.status"></span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button @click="openWindow(window)" class="text-indigo-600 hover:text-indigo-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                                <span x-show="!processing.has(window.id)">打开</span>
+                                <span x-show="processing.has(window.id)">...</span>
+                            </button>
+                            <button @click="closeWindow(window)" class="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                                <span x-show="!processing.has(window.id)">关闭</span>
+                                <span x-show="processing.has(window.id)">...</span>
+                            </button>
+                        </td>
+                    </tr>
+                </template>
+                <tr x-show="windows.length === 0">
+                    <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">暂无窗口数据，请点击同步按钮</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function windowsManager() {
+        return {
+            windows: [],
+            syncing: false,
+            processing: new Set(), // Track processing state by window ID
+
+            async fetchWindows() {
+                try {
+                    const response = await fetch('/api/windows');
+                    if (response.ok) {
+                        this.windows = await response.json();
+                    }
+                } catch (error) {
+                    console.error('Error fetching windows:', error);
+                }
+            },
+
+            async syncWindows() {
+                this.syncing = true;
+                try {
+                    const response = await fetch('/api/windows/sync', { method: 'POST' });
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        // 成功
+                        alert(`同步成功！新增 ${result.data.new_count} 个窗口，共同步 ${result.data.synced_count} 个。`);
+                        this.fetchWindows();
+                    } else {
+                        // 失败
+                        alert('同步失败: ' + (result.detail || result.msg || '未知错误'));
+                    }
+                } catch (error) {
+                    console.error('Sync error:', error);
+                    alert('同步请求失败');
+                } finally {
+                    this.syncing = false;
+                }
+            },
+
+            async openWindow(window) {
+                if (this.processing.has(window.id)) return;
+                
+                // Add to processing set
+                this.processing.add(window.id);
+                // Force reactivity since Set isn't automatically reactive in Alpine v2/v3 without wrapper
+                this.processing = new Set(this.processing);
+                
+                try {
+                    const response = await fetch(`/api/windows/${window.id}/open`, { method: 'POST' });
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        // Success - silently succeed or show toast (not implemented yet)
+                        console.log('Window opened:', result);
+                    } else {
+                        alert('打开失败: ' + (result.detail || '未知错误'));
+                    }
+                } catch (error) {
+                    console.error('Open error:', error);
+                    alert('请求失败');
+                } finally {
+                    this.processing.delete(window.id);
+                    this.processing = new Set(this.processing);
+                }
+            },
+
+            async closeWindow(window) {
+                if (this.processing.has(window.id)) return;
+                
+                this.processing.add(window.id);
+                this.processing = new Set(this.processing);
+                
+                try {
+                    const response = await fetch(`/api/windows/${window.id}/close`, { method: 'POST' });
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        console.log('Window closed:', result);
+                    } else {
+                        alert('关闭失败: ' + (result.detail || '未知错误'));
+                    }
+                } catch (error) {
+                    console.error('Close error:', error);
+                    alert('请求失败');
+                } finally {
+                    this.processing.delete(window.id);
+                    this.processing = new Set(this.processing);
+                }
+            },
+
+            getStatusColor(status) {
+                switch(status) {
+                    case '空闲': return 'text-green-800 bg-green-100';
+                    case '使用中': return 'text-blue-800 bg-blue-100';
+                    case '异常': return 'text-yellow-800 bg-yellow-100';
+                    case '永久禁用': return 'text-red-800 bg-red-100';
+                    default: return 'text-gray-800 bg-gray-100';
+                }
+            }
+        }
+    }
+</script>
+{% endblock %}

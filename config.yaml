@@ -33,3 +33,35 @@ log_retention:
 backup:
   max_backups: 30            # 最大备份文件数
   backup_dir: "backups/"     # 备份目录
+
+# 养号 SOP 配置
+nurture_sop:
+  max_days: 10
+  days:
+    1:
+      online_minutes: 10
+      once_tasks:
+        - { action: "login", execution_type: "auto" }
+        - { action: "check_profile", execution_type: "auto" }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+    2:
+      online_minutes: 15
+      once_tasks:
+        - { action: "like_post", execution_type: "auto" }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+    3:
+      online_minutes: 20
+      once_tasks: []
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "watch_video", execution_type: "auto" }
+    # Default template for days > max_days
+    default:
+      online_minutes: 30
+      once_tasks: []
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "watch_video", execution_type: "auto" }
+        - { action: "interact_group", execution_type: "auto" }

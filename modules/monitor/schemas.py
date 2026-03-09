@@ -29,5 +29,12 @@ class ActionLogBase(BaseModel):
 
 class ActionLog(ActionLogBase):
     id: int
+    is_dismissed: bool = False
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+class DashboardStats(BaseModel):
+    account_stats: dict
+    task_stats: dict
+    active_rpa_count: int
+    alert_count: int

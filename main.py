@@ -10,6 +10,9 @@ import os
 from db.database import engine, Base
 from modules.asset.router import router as asset_router
 from modules.monitor.router import router as monitor_router
+from modules.nurture.router import router as nurture_router
+from modules.system.router import router as system_router
+from modules.system.service import perform_backup, perform_log_cleanup
 from core.scheduler import start_scheduler, stop_scheduler
 
 # 加载业务配置
@@ -23,6 +26,12 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("数据库初始化完成")
+
+    # 执行系统维护任务
+    logger.info("执行系统维护：数据库备份...")
+    await perform_backup()
+    logger.info("执行系统维护：清理旧日志...")
+    await perform_log_cleanup()
 
     # 启动调度器
     await start_scheduler()
@@ -51,11 +60,58 @@ templates = Jinja2Templates(directory="templates")
 # 注册 API 路由
 app.include_router(asset_router, prefix="/api")
 app.include_router(monitor_router, prefix="/api")
+app.include_router(nurture_router, prefix="/api")
+app.include_router(system_router, prefix="/api")
 
 @app.get("/")
 async def index(request: Request):
     """首页渲染"""
-    return templates.TemplateResponse("base.html", {"request": request, "title": "仪表盘"})
+    return templates.TemplateResponse("dashboard.html", {"request": request, "title": "仪表盘"})
+
+@app.get("/accounts")
+async def accounts_page(request: Request):
+    """账号管理页面"""
+    return templates.TemplateResponse("accounts.html", {"request": request, "title": "账号管理"})
+
+@app.get("/proxies")
+async def proxies_page(request: Request):
+    """代理管理页面"""
+    return templates.TemplateResponse("proxies.html", {"request": request, "title": "代理管理"})
+
+@app.get("/windows")
+async def windows_page(request: Request):
+    """窗口管理页面"""
+    return templates.TemplateResponse("windows.html", {"request": request, "title": "窗口管理"})
+
+@app.get("/tasks")
+async def tasks_page(request: Request):
+    """任务管理页面"""
+    return templates.TemplateResponse("tasks.html", {"request": request, "title": "任务管理"})
+
+@app.get("/ads")
+async def ads_page(request: Request):
+    """广告投放页面"""
+    return templates.TemplateResponse("base.html", {"request": request, "title": "广告投放"})
+
+@app.get("/logs")
+async def logs_page(request: Request):
+    """日志页面"""
+    return templates.TemplateResponse("logs.html", {"request": request, "title": "操作日志"})
+
+@app.get("/nurture")
+async def nurture_page(request: Request):
+    """养号流程页面"""
+    return templates.TemplateResponse("base.html", {"request": request, "title": "养号流程"})
+
+@app.get("/rpa")
+async def rpa_page(request: Request):
+    """RPA 脚本页面"""
+    return templates.TemplateResponse("base.html", {"request": request, "title": "RPA 脚本"})
+
+@app.get("/assets")
+async def assets_page(request: Request):
+    """资源管理页面"""
+    return templates.TemplateResponse("base.html", {"request": request, "title": "资源管理"})
 
 if __name__ == "__main__":
     # 仅监听 127.0.0.1:8000

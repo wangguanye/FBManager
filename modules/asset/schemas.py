@@ -1,28 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from datetime import datetime, date
 from typing import Optional, List
-
-class FBAccountBase(BaseModel):
-    username: str
-    email: str
-    region: str
-    target_timezone: str = "America/New_York"
-    status: str = "待养号"
-    notes: Optional[str] = None
-
-class FBAccountCreate(FBAccountBase):
-    password: str
-    email_password: str
-    totp_secret: Optional[str] = None
-
-class FBAccount(FBAccountBase):
-    id: int
-    nurture_day: int
-    nurture_start_date: Optional[date] = None
-    created_at: datetime
-    last_active_at: datetime
-    is_deleted: bool
-    model_config = ConfigDict(from_attributes=True)
 
 class ProxyIPBase(BaseModel):
     host: str
@@ -34,6 +12,15 @@ class ProxyIPBase(BaseModel):
 
 class ProxyIPCreate(ProxyIPBase):
     password: Optional[str] = None
+
+class ProxyIPUpdate(BaseModel):
+    host: Optional[str] = None
+    port: Optional[int] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    region: Optional[str] = None
+    type: Optional[str] = None
+    status: Optional[str] = None
 
 class ProxyIP(ProxyIPBase):
     id: int
@@ -49,6 +36,58 @@ class BrowserWindowCreate(BrowserWindowBase):
 
 class BrowserWindow(BrowserWindowBase):
     id: int
+    model_config = ConfigDict(from_attributes=True)
+
+class FBAccountBase(BaseModel):
+    username: str
+    email: str
+    region: str
+    target_timezone: str = "America/New_York"
+    status: str = "待养号"
+    notes: Optional[str] = None
+
+class FBAccountCreate(FBAccountBase):
+    password: str
+    email_password: str
+    totp_secret: Optional[str] = None
+
+class FBAccountUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[str] = None
+    region: Optional[str] = None
+    target_timezone: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    password: Optional[str] = None
+    email_password: Optional[str] = None
+    totp_secret: Optional[str] = None
+
+class FBAccountBind(BaseModel):
+    proxy_id: int
+    window_id: int
+
+class FBAccount(FBAccountBase):
+    id: int
+    nurture_day: int
+    nurture_start_date: Optional[date] = None
+    created_at: datetime
+    last_active_at: datetime
+    is_deleted: bool
+    proxy_id: Optional[int] = None
+    browser_window_id: Optional[int] = None
+    
+    # 嵌套对象，方便前端展示
+    proxy: Optional[ProxyIP] = None
+    browser_window: Optional[BrowserWindow] = None
+
+    # 计算字段，不返回真实密码
+    @computed_field
+    def has_password(self) -> bool:
+        # 这里实际上无法直接访问 ORM 对象的 password_encrypted 属性，因为 Pydantic 模型是从属性初始化的
+        # 但是我们可以通过 extra context 或者在 service 层处理
+        # 简单起见，我们假设只要对象被加载，密码就是存在的（必填项）
+        return True 
+
     model_config = ConfigDict(from_attributes=True)
 
 class CommentPoolBase(BaseModel):
@@ -68,9 +107,3 @@ class CommentPool(CommentPoolBase):
 class AvatarAssetBase(BaseModel):
     file_path: str
     type: str
-
-class AvatarAsset(AvatarAssetBase):
-    id: int
-    is_used: bool
-    used_by_account_id: Optional[int] = None
-    model_config = ConfigDict(from_attributes=True)

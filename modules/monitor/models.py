@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from db.database import Base
 
@@ -11,6 +11,8 @@ class NurtureTask(Base):
     fb_account_id = Column(Integer, ForeignKey("fb_accounts.id"))
     day_number = Column(Integer)
     scheduled_date = Column(Date)
+    scheduled_time = Column(DateTime, nullable=True) # 计划执行时间
+    action = Column(String) # 具体动作，如 login, post, like
     task_type = Column(String) # once / daily / manual
     execution_type = Column(String) # auto / manual
     status = Column(String, default="pending")
@@ -32,6 +34,7 @@ class ActionLog(Base):
     action_type = Column(String)
     level = Column(String) # INFO / WARN / ERROR / CRITICAL
     message = Column(Text)
+    is_dismissed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # 关系定义

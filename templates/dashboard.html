@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="dashboard()" x-init="init()">
+    <!-- 系统操作栏 -->
+    <div class="flex justify-end mb-4">
+        <button @click="backupSystem()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded inline-flex items-center">
+            <svg class="fill-current w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M13 8V2H7v6H2l8 8 8-8h-5zM0 18h20v2H0v-2z"/></svg>
+            <span>💾 立即备份</span>
+        </button>
+    </div>
+
+    <!-- 顶部4个统计卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <!-- 账号状态分布 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-gray-500 text-sm font-medium">账号状态分布</h3>
+            <div class="mt-2 grid grid-cols-2 gap-2">
+                 <template x-for="(count, status) in stats.account_stats" :key="status">
+                    <div class="text-center bg-gray-50 p-2 rounded">
+                        <div class="text-xl font-bold text-indigo-600" x-text="count"></div>
+                        <div class="text-xs text-gray-500" x-text="status"></div>
+                    </div>
+                 </template>
+                 <div x-show="Object.keys(stats.account_stats).length === 0" class="col-span-2 text-center text-gray-400 text-sm">暂无数据</div>
+            </div>
+        </div>
+
+        <!-- 今日任务 -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-gray-500 text-sm font-medium">今日任务</h3>
+            <div class="mt-2 flex justify-between items-end">
+                <div>
+                    <div class="text-3xl font-bold text-gray-800" x-text="stats.task_stats.total || 0"></div>
+                    <div class="text-xs text-gray-500">总任务数</div>
+                </div>
+                <div class="text-right text-sm">
+                    <div class="text-green-600">完成: <span x-text="stats.task_stats.completed || 0"></span></div>
+                    <div class="text-red-600">失败: <span x-text="stats.task_stats.failed || 0"></span></div>
+                    <div class="text-yellow-600">待办: <span x-text="stats.task_stats.pending || 0"></span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 活跃 RPA -->
+        <div class="bg-white rounded-lg shadow p-6 flex items-center justify-between">
+            <div>
+                <h3 class="text-gray-500 text-sm font-medium">活跃 RPA</h3>
+                <div class="mt-2 text-3xl font-bold text-blue-600" x-text="stats.active_rpa_count || 0"></div>
+                <div class="text-xs text-gray-500">运行中任务</div>
+            </div>
+            <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+            </div>
+        </div>
+
+        <!-- 未处理告警 -->
+        <div class="bg-white rounded-lg shadow p-6 flex items-center justify-between">
+            <div>
+                <h3 class="text-gray-500 text-sm font-medium">未处理告警</h3>
+                <div class="mt-2 text-3xl font-bold text-red-600" x-text="stats.alert_count || 0"></div>
+                <div class="text-xs text-gray-500">需关注</div>
+            </div>
+            <div class="p-3 rounded-full bg-red-100 text-red-600">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <!-- 左侧：今日任务执行进度表格 -->
+        <div class="lg:col-span-2 bg-white rounded-lg shadow overflow-hidden flex flex-col h-96">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <h3 class="text-lg font-medium text-gray-900">今日任务执行进度</h3>
+            </div>
+            <div class="flex-grow overflow-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50 sticky top-0">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">任务ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">账号ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">执行时间</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="task in todayTasks" :key="task.id">
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="task.id"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="task.fb_account_id"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="task.task_type"></td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                          :class="{
+                                              'bg-green-100 text-green-800': task.status === 'completed',
+                                              'bg-red-100 text-red-800': task.status === 'failed',
+                                              'bg-yellow-100 text-yellow-800': task.status === 'pending',
+                                              'bg-blue-100 text-blue-800': task.status === 'running'
+                                          }"
+                                          x-text="task.status">
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(task.executed_at)"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="todayTasks.length === 0">
+                            <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">今日暂无任务</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 右侧：异常告警列表 -->
+        <div class="bg-white rounded-lg shadow overflow-hidden flex flex-col h-96">
+            <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <h3 class="text-lg font-medium text-gray-900">异常告警</h3>
+                <span class="text-xs text-gray-500" x-text="'共 ' + alerts.length + ' 条'"></span>
+            </div>
+            <div class="flex-grow overflow-auto p-4 space-y-4">
+                <template x-for="alert in alerts" :key="alert.id">
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 relative rounded-r-md transition-all duration-300">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm font-bold text-red-700" x-text="alert.level"></p>
+                                <p class="text-xs text-red-500 mt-1" x-text="formatDate(alert.created_at)"></p>
+                            </div>
+                            <button @click="dismissAlert(alert.id)" class="text-red-400 hover:text-red-600 focus:outline-none" title="标记已处理">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="mt-2 text-sm text-red-800 break-words" x-text="alert.message"></p>
+                        <div class="mt-2 text-xs text-red-600 flex space-x-2">
+                            <span x-show="alert.fb_account_id">账号: <span x-text="alert.fb_account_id"></span></span>
+                            <span x-show="alert.task_id">任务: <span x-text="alert.task_id"></span></span>
+                        </div>
+                    </div>
+                </template>
+                <div x-show="alerts.length === 0" class="text-center text-gray-500 py-10">
+                    暂无未处理告警
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 底部：人工待办卡片区 -->
+     <div class="mb-6">
+        <h3 class="text-lg font-medium text-gray-900 mb-4" x-show="manualTasks.length > 0">人工待办任务</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <template x-for="task in manualTasks" :key="task.id">
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg shadow p-4 relative">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-bold text-yellow-800">人工待办</h4>
+                        <span class="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded">ID: <span x-text="task.id"></span></span>
+                    </div>
+                    <p class="text-sm text-yellow-700 mb-2">账号ID: <span x-text="task.fb_account_id"></span></p>
+                    <p class="text-sm text-yellow-700 mb-4">类型: <span x-text="task.task_type"></span></p>
+                    <button class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
+                            @click="completeTask(task.id)">
+                        确认完成
+                    </button>
+                </div>
+            </template>
+        </div>
+     </div>
+</div>
+
+<script>
+function dashboard() {
+    return {
+        stats: {
+            account_stats: {},
+            task_stats: {},
+            active_rpa_count: 0,
+            alert_count: 0
+        },
+        alerts: [],
+        todayTasks: [], 
+        
+        get manualTasks() {
+            return this.todayTasks.filter(t => t.execution_type === 'manual' && t.status === 'pending');
+        },
+
+        init() {
+            this.fetchAll();
+            setInterval(() => {
+                this.fetchAll();
+            }, 30000); // 30秒自动刷新
+        },
+        
+        fetchAll() {
+            this.fetchStats();
+            this.fetchAlerts();
+            this.fetchTodayTasks();
+        },
+
+        async fetchStats() {
+            try {
+                const res = await fetch('/api/dashboard/stats');
+                if (res.ok) this.stats = await res.json();
+            } catch (e) { console.error(e); }
+        },
+        async fetchAlerts() {
+            try {
+                const res = await fetch('/api/alerts');
+                if (res.ok) this.alerts = await res.json();
+            } catch (e) { console.error(e); }
+        },
+        async fetchTodayTasks() {
+            try {
+                const res = await fetch('/api/dashboard/tasks?size=100'); 
+                if (res.ok) this.todayTasks = await res.json();
+            } catch (e) { console.error(e); }
+        },
+        async dismissAlert(id) {
+            try {
+                const res = await fetch(`/api/alerts/${id}/dismiss`, { method: 'POST' });
+                if (res.ok) {
+                    this.alerts = this.alerts.filter(a => a.id !== id);
+                    this.stats.alert_count = Math.max(0, this.stats.alert_count - 1);
+                }
+            } catch (e) { console.error(e); }
+        },
+        async completeTask(id) {
+            alert('功能待开发：确认完成任务 ' + id);
+            // Future implementation: POST /api/tasks/{id}/complete
+        },
+        formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleString('zh-CN', { hour12: false });
+        },
+
+        async backupSystem() {
+                if (!confirm('确定要立即备份数据库吗？')) return;
+                try {
+                    const res = await fetch('/api/system/backup', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.code === 0) {
+                        alert('备份成功: ' + data.msg);
+                    } else {
+                        alert('备份失败: ' + data.msg);
+                    }
+                } catch (e) {
+                    alert('备份请求出错: ' + e);
+                }
+            }
+        }
+    }
+    </script>
+{% endblock %}
