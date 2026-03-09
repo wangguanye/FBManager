@@ -56,7 +56,7 @@ nurture_sop:
       once_tasks: []
       daily_tasks:
         - { action: "scroll_feed", execution_type: "auto" }
-        - { action: "watch_video", execution_type: "auto" }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 3 } }
     4:
       online_minutes: 25
       once_tasks:

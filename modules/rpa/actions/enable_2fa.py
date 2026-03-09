@@ -5,8 +5,6 @@ import asyncio
 import random
 import re
 
-import pyotp
-
 from modules.rpa.base import BaseAction, register_action
 from db.database import AsyncSessionLocal
 from modules.asset.models import FBAccount
@@ -23,6 +21,12 @@ class Enable2FAAction(BaseAction):
             return {"success": False, "message": "unsupported_method", "data": {"enabled": False, "method": method}}
         if not account_id:
             return {"success": False, "message": "missing_account_id", "data": {"enabled": False, "method": method}}
+
+        try:
+            import pyotp
+        except Exception as e:
+            logger.warning(f"pyotp 导入失败: {e}")
+            return {"success": False, "message": "pyotp_not_installed", "data": {"enabled": False, "method": method}}
 
         try:
             await page.goto("https://www.facebook.com/settings?tab=security", timeout=60000)

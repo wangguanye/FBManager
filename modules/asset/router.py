@@ -41,7 +41,9 @@ async def update_account(
     if not result:
         raise HTTPException(status_code=404, detail="Account not found")
     warning_message = result.get("warning")
-    return {"code": 0, "data": result.get("account"), "warning": warning_message}
+    account = result.get("account")
+    account_payload = schemas.FBAccount.model_validate(account).model_dump() if account else None
+    return {"code": 0, "data": account_payload, "warning": warning_message}
 
 @router.delete("/accounts/{id}")
 async def delete_account(id: int, db: AsyncSession = Depends(get_db)):
@@ -136,7 +138,8 @@ async def upload_avatars(
     db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
     items = await service.upload_avatars(db, files, type)
-    return {"uploaded": len(items), "items": items}
+    output_items = [schemas.AvatarOut.model_validate(item).model_dump() for item in items]
+    return {"uploaded": len(output_items), "items": output_items}
 
 @router.get("/avatars", response_model=List[schemas.AvatarOut], tags=["Avatars"])
 async def list_avatars(

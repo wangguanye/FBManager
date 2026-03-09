@@ -14,6 +14,8 @@ from modules.nurture.router import router as nurture_router
 from modules.system.router import router as system_router
 from modules.system.service import perform_backup, perform_log_cleanup
 from core.scheduler import start_scheduler, stop_scheduler
+from modules.asset.models import FBAccount, ProxyIP, BrowserWindow, CommentPool, AvatarAsset, AdDailyStat
+from modules.monitor.models import NurtureTask, ActionLog, Alert
 
 # 加载业务配置
 with open("config.yaml", "r", encoding="utf-8") as f:

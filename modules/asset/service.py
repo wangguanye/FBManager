@@ -73,7 +73,7 @@ async def update_fb_account(db: AsyncSession, account_id: int, update_data: FBAc
         if update_data.status == "banned":
             warning_message = "账号将被封禁并触发级联禁用代理与窗口"
             await cascade_on_ban(db, account_id)
-        elif previous_status in ["abnormal", "异常"] and update_data.status in ["nurturing", "养号中"]:
+        elif previous_status in ["abnormal", "异常", "banned", "已封禁"] and update_data.status in ["nurturing", "养号中"]:
             await cascade_on_recovery(db, account_id)
         account.status = update_data.status
 
@@ -100,8 +100,13 @@ async def update_fb_account(db: AsyncSession, account_id: int, update_data: FBAc
         
     db.add(account)
     await db.flush()
-    await db.refresh(account)
-    return {"account": account, "warning": warning_message}
+    stmt = select(FBAccount).where(FBAccount.id == account_id).options(
+        selectinload(FBAccount.proxy),
+        selectinload(FBAccount.browser_window)
+    )
+    result = await db.execute(stmt)
+    refreshed_account = result.scalar_one_or_none()
+    return {"account": refreshed_account, "warning": warning_message}
 
 async def delete_fb_account(db: AsyncSession, account_id: int):
     """软删除账号"""
@@ -564,7 +569,7 @@ async def pick_comment(db: AsyncSession, language: str = "en"):
     stmt = (
         select(CommentPool)
         .where(CommentPool.language == language)
-        .order_by(CommentPool.use_count.asc(), func.random())
+        .order_by(CommentPool.use_count.asc(), CommentPool.created_at.desc())
         .limit(1)
         .with_for_update()
     )

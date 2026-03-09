@@ -11,7 +11,6 @@ from modules.monitor.models import ActionLog, NurtureTask
 from modules.monitor.service import create_alert
 from modules.asset.models import FBAccount, ProxyIP
 from core.cascade import cascade_on_ban
-from core.scheduler import pause_scheduler
 from db.database import AsyncSessionLocal
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,6 +56,7 @@ class RPAExecutor:
             return
 
         if not await self.browser_client.check_alive():
+            from core.scheduler import pause_scheduler
             pause_scheduler()
             await self._handle_precheck_failure(account, task, "bitbrowser_not_running", "ERROR")
             return

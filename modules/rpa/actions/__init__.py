@@ -12,3 +12,4 @@ from modules.rpa.actions.upload_avatar import UploadAvatarAction
 from modules.rpa.actions.enable_2fa import Enable2FAAction
 from modules.rpa.actions.view_stories import ViewStoriesAction
 from modules.rpa.actions.visit_profile import VisitProfileAction
+from modules.rpa.actions.share_post import SharePostAction
