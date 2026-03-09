@@ -10,3 +10,5 @@ jinja2
 cryptography
 python-dotenv
 httpx
+playwright
+pytz

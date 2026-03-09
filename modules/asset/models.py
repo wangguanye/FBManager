@@ -32,6 +32,7 @@ class FBAccount(Base):
     nurture_tasks = relationship("NurtureTask", back_populates="fb_account")
     action_logs = relationship("ActionLog", back_populates="fb_account")
     avatar_assets = relationship("AvatarAsset", back_populates="used_by_account")
+    ad_stats = relationship("AdDailyStat", back_populates="fb_account")
 
 class ProxyIP(Base):
     """代理 IP 模型"""
@@ -61,6 +62,13 @@ class BrowserWindow(Base):
     # 关系定义
     fb_account = relationship("FBAccount", back_populates="browser_window", uselist=False)
 
+    @property
+    def bound_proxy(self):
+        """Helper property to access the proxy of the bound account"""
+        if self.fb_account:
+            return self.fb_account.proxy
+        return None
+
 class CommentPool(Base):
     """评论池模型"""
     __tablename__ = "comment_pool"
@@ -84,3 +92,19 @@ class AvatarAsset(Base):
 
     # 关系定义
     used_by_account = relationship("FBAccount", back_populates="avatar_assets")
+
+class AdDailyStat(Base):
+    """广告每日数据统计（预留）"""
+    __tablename__ = "ad_daily_stats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    fb_account_id = Column(Integer, ForeignKey("fb_accounts.id"), nullable=True)
+    date = Column(Date, index=True)
+    spend = Column(Integer, default=0) # in cents
+    impressions = Column(Integer, default=0)
+    clicks = Column(Integer, default=0)
+    conversions = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 关系定义
+    fb_account = relationship("FBAccount", back_populates="ad_stats")

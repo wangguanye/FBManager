@@ -19,6 +19,7 @@ class NurtureTask(Base):
     retry_count = Column(Integer, default=0)
     result_log = Column(Text, nullable=True)
     executed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     # 关系定义
     fb_account = relationship("FBAccount", back_populates="nurture_tasks")

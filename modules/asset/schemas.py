@@ -38,6 +38,24 @@ class BrowserWindow(BrowserWindowBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
 
+class FBAccountBrief(BaseModel):
+    id: int
+    username: str
+    status: str
+    model_config = ConfigDict(from_attributes=True)
+
+class ProxyIPBrief(BaseModel):
+    id: int
+    host: str
+    port: int
+    model_config = ConfigDict(from_attributes=True)
+
+class BrowserWindowDetail(BrowserWindow):
+    bound_account: Optional[FBAccountBrief] = Field(None, alias="fb_account")
+    bound_proxy: Optional[ProxyIPBrief] = None
+        
+    model_config = ConfigDict(from_attributes=True)
+
 class FBAccountBase(BaseModel):
     username: str
     email: str

@@ -2,7 +2,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from db.database import AsyncSessionLocal
-from modules.nurture.service import generate_daily_tasks, check_and_execute_tasks
+from modules.nurture.service import generate_daily_tasks, check_and_execute_tasks, check_manual_task_timeout
 from loguru import logger
 from datetime import datetime
 
@@ -24,6 +24,12 @@ async def job_execute_tasks():
     # logger.debug("Executing job: check_and_execute_tasks") # Debug level to avoid spam
     await check_and_execute_tasks()
 
+async def job_check_manual_timeout():
+    """
+    检查手动任务超时
+    """
+    await check_manual_task_timeout()
+
 async def start_scheduler():
     """
     启动调度器。
@@ -44,6 +50,14 @@ async def start_scheduler():
             job_execute_tasks,
             IntervalTrigger(minutes=1),
             id="execute_tasks",
+            replace_existing=True
+        )
+        
+        # 3. 手动任务超时检查：每 30 分钟检查一次
+        scheduler.add_job(
+            job_check_manual_timeout,
+            IntervalTrigger(minutes=30),
+            id="check_manual_timeout",
             replace_existing=True
         )
         

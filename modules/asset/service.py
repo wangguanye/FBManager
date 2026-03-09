@@ -480,3 +480,21 @@ async def delete_browser_window(db: AsyncSession, window_id: int):
     await db.delete(window)
     await db.commit()
     return True
+
+async def delete_proxy(db: AsyncSession, proxy_id: int):
+    """删除代理 IP"""
+    # 检查是否有账号绑定该代理
+    stmt = select(FBAccount).where(FBAccount.proxy_id == proxy_id, FBAccount.is_deleted == False)
+    result = await db.execute(stmt)
+    bound_account = result.scalar_one_or_none()
+    
+    if bound_account:
+        raise HTTPException(status_code=400, detail=f"该代理仍被账号 {bound_account.username} 绑定，请先解绑")
+        
+    proxy = await db.get(ProxyIP, proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+        
+    await db.delete(proxy)
+    await db.commit()
+    return True

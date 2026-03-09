@@ -91,13 +91,19 @@ async def update_proxy(
         raise HTTPException(status_code=404, detail="Proxy not found")
     return proxy
 
+@router.delete("/proxies/{id}", status_code=204, tags=["Proxies"])
+async def delete_proxy(id: int, db: AsyncSession = Depends(get_db)):
+    """删除代理 IP"""
+    await service.delete_proxy(db, id)
+    return None
+
 # Browser Windows
 @router.post("/browser-windows", response_model=schemas.BrowserWindow, tags=["Windows"])
 async def create_browser_window(window: schemas.BrowserWindowCreate, db: AsyncSession = Depends(get_db)):
     """创建浏览器窗口"""
     return await service.create_browser_window(db, window)
 
-@router.get("/browser-windows", response_model=List[schemas.BrowserWindow], tags=["Windows"])
+@router.get("/browser-windows", response_model=List[schemas.BrowserWindowDetail], tags=["Windows"])
 async def list_browser_windows(status: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """列出所有浏览器窗口"""
     return await service.get_browser_windows(db, status)
@@ -120,7 +126,7 @@ async def delete_window(id: int, db: AsyncSession = Depends(get_db)):
     return None
 
 # Windows endpoints
-@router.get("/windows", response_model=List[schemas.BrowserWindow], tags=["Windows"])
+@router.get("/windows", response_model=List[schemas.BrowserWindowDetail], tags=["Windows"])
 async def list_windows(status: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """列出所有浏览器窗口 (Alias for /browser-windows to match frontend requirement)"""
     return await service.get_browser_windows(db, status)
