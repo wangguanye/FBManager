@@ -2,7 +2,10 @@
 
 FBManager 是一个基于 Python FastAPI 和 Playwright 的 Facebook 账号管理系统，旨在提供账号管理、代理管理、RPA 自动化养号、任务调度等一站式解决方案。
 
-## 功能特性
+## 最新更新
+
+- **2026-03-09**: 优化代码同步流程，新增自动化 Git 脚本。
+
 
 -   **账号管理**：集中管理 Facebook 账号信息（账号、密码、2FA、Cookie 等）。
 -   **代理管理**：支持 HTTP/SOCKS5 代理，自动关联账号。
