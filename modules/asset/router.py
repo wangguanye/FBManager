@@ -14,6 +14,11 @@ async def create_account(account: schemas.FBAccountCreate, db: AsyncSession = De
     """新增账号"""
     return await service.create_fb_account(db, account)
 
+@router.post("/accounts/batch")
+async def batch_import_accounts(import_data: schemas.FBAccountBatchImport, db: AsyncSession = Depends(get_db)):
+    """批量导入账号"""
+    return await service.batch_import_accounts(db, import_data.raw_text)
+
 @router.get("/accounts", response_model=List[schemas.FBAccount])
 async def list_accounts(
     skip: int = 0, 
@@ -60,6 +65,11 @@ async def create_proxy(proxy: schemas.ProxyIPCreate, db: AsyncSession = Depends(
     """创建代理 IP"""
     return await service.create_proxy(db, proxy)
 
+@router.post("/proxies/batch", tags=["Proxies"])
+async def batch_import_proxies(import_data: schemas.ProxyIPBatchImport, db: AsyncSession = Depends(get_db)):
+    """批量导入代理 IP"""
+    return await service.batch_import_proxies(db, import_data.raw_text)
+
 @router.get("/proxies", response_model=List[schemas.ProxyIP], tags=["Proxies"])
 async def list_proxies(
     status: Optional[str] = None, 
@@ -98,10 +108,16 @@ async def sync_windows(db: AsyncSession = Depends(get_db)):
     try:
         result = await service.sync_browser_windows(db)
         return {"code": 0, "msg": "Sync successful", "data": result}
-    except BitBrowserNotRunningError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+    except BitBrowserNotRunningError:
+        raise HTTPException(status_code=503, detail="BitBrowser is not running")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+@router.delete("/windows/{id}", status_code=204, tags=["Windows"])
+async def delete_window(id: int, db: AsyncSession = Depends(get_db)):
+    """删除浏览器窗口记录"""
+    await service.delete_browser_window(db, id)
+    return None
 
 # Windows endpoints
 @router.get("/windows", response_model=List[schemas.BrowserWindow], tags=["Windows"])

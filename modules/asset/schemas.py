@@ -50,6 +50,7 @@ class FBAccountCreate(FBAccountBase):
     password: str
     email_password: str
     totp_secret: Optional[str] = None
+    cookie: Optional[str] = None
 
 class FBAccountUpdate(BaseModel):
     username: Optional[str] = None
@@ -61,6 +62,13 @@ class FBAccountUpdate(BaseModel):
     password: Optional[str] = None
     email_password: Optional[str] = None
     totp_secret: Optional[str] = None
+    cookie: Optional[str] = None
+
+class FBAccountBatchImport(BaseModel):
+    raw_text: str
+
+class ProxyIPBatchImport(BaseModel):
+    raw_text: str
 
 class FBAccountBind(BaseModel):
     proxy_id: int

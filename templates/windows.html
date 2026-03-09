@@ -25,6 +25,9 @@
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">比特窗口 ID</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">窗口名称</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定个人账号</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定广告账户</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定代理 IP</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
                     <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
                 </tr>
@@ -35,6 +38,15 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.id"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono" x-text="window.bit_window_id"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="window.name"></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <a x-show="window.fb_account" :href="'/accounts?q=' + window.fb_account.username" class="text-indigo-600 hover:text-indigo-900" x-text="window.fb_account.username"></a>
+                            <span x-show="!window.fb_account">-</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">-</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span x-show="window.fb_account && window.fb_account.proxy" x-text="window.fb_account.proxy.host + ':' + window.fb_account.proxy.port"></span>
+                            <span x-show="!(window.fb_account && window.fb_account.proxy)">-</span>
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span :class="getStatusColor(window.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-opacity-10" x-text="window.status"></span>
                         </td>
@@ -43,15 +55,19 @@
                                 <span x-show="!processing.has(window.id)">打开</span>
                                 <span x-show="processing.has(window.id)">...</span>
                             </button>
-                            <button @click="closeWindow(window)" class="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                            <button @click="closeWindow(window)" class="text-yellow-600 hover:text-yellow-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
                                 <span x-show="!processing.has(window.id)">关闭</span>
+                                <span x-show="processing.has(window.id)">...</span>
+                            </button>
+                            <button @click="deleteWindow(window)" class="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                                <span x-show="!processing.has(window.id)">删除</span>
                                 <span x-show="processing.has(window.id)">...</span>
                             </button>
                         </td>
                     </tr>
                 </template>
                 <tr x-show="windows.length === 0">
-                    <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">暂无窗口数据，请点击同步按钮</td>
+                    <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">暂无窗口数据，请点击同步按钮</td>
                 </tr>
             </tbody>
         </table>
@@ -126,23 +142,50 @@
             },
 
             async closeWindow(window) {
-                if (this.processing.has(window.id)) return;
-                
                 this.processing.add(window.id);
                 this.processing = new Set(this.processing);
-                
                 try {
                     const response = await fetch(`/api/windows/${window.id}/close`, { method: 'POST' });
                     const result = await response.json();
                     
                     if (response.ok) {
-                        console.log('Window closed:', result);
+                        this.fetchWindows();
                     } else {
                         alert('关闭失败: ' + (result.detail || '未知错误'));
                     }
                 } catch (error) {
                     console.error('Close error:', error);
-                    alert('请求失败');
+                    alert('关闭请求失败');
+                } finally {
+                    this.processing.delete(window.id);
+                    this.processing = new Set(this.processing);
+                }
+            },
+
+            async deleteWindow(window) {
+                if (!confirm(`确定删除该窗口记录 ${window.name} (${window.bit_window_id}) ？`)) {
+                    return;
+                }
+                this.processing.add(window.id);
+                this.processing = new Set(this.processing);
+                try {
+                    const response = await fetch(`/api/windows/${window.id}`, { method: 'DELETE' });
+                    if (response.ok) {
+                        this.fetchWindows();
+                    } else {
+                        // Check if response has content before parsing JSON
+                        const text = await response.text();
+                        let data = {};
+                        try {
+                            data = JSON.parse(text);
+                        } catch (e) {
+                            // If not JSON, use text or default message
+                        }
+                        alert('删除失败: ' + (data.detail || '未知错误'));
+                    }
+                } catch (error) {
+                    console.error('Delete error:', error);
+                    alert('删除请求失败');
                 } finally {
                     this.processing.delete(window.id);
                     this.processing = new Set(this.processing);

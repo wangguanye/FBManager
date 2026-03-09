@@ -19,7 +19,8 @@ async def create_fb_account(db: AsyncSession, account: FBAccountCreate):
         target_timezone=account.target_timezone,
         status="待养号",
         notes=account.notes,
-        totp_secret_encrypted=encrypt_value(account.totp_secret) if account.totp_secret else None
+        totp_secret_encrypted=encrypt_value(account.totp_secret) if account.totp_secret else None,
+        cookie_encrypted=encrypt_value(account.cookie) if account.cookie else None
     )
     db.add(db_account)
     await db.flush()
@@ -87,6 +88,8 @@ async def update_fb_account(db: AsyncSession, account_id: int, update_data: FBAc
         account.email_password_encrypted = encrypt_value(update_data.email_password)
     if update_data.totp_secret is not None:
         account.totp_secret_encrypted = encrypt_value(update_data.totp_secret)
+    if update_data.cookie is not None:
+        account.cookie_encrypted = encrypt_value(update_data.cookie)
         
     db.add(account)
     await db.flush()
@@ -226,7 +229,10 @@ async def create_browser_window(db: AsyncSession, window: BrowserWindowCreate):
 
 async def get_browser_windows(db: AsyncSession, status: str = None):
     """获取所有浏览器窗口"""
-    stmt = select(BrowserWindow)
+    # 预加载绑定的账号和代理
+    stmt = select(BrowserWindow).options(
+        selectinload(BrowserWindow.fb_account).selectinload(FBAccount.proxy)
+    )
     if status:
         stmt = stmt.where(BrowserWindow.status == status)
     result = await db.execute(stmt)
@@ -321,3 +327,156 @@ async def close_browser_window(db: AsyncSession, window_id: int):
         raise HTTPException(status_code=503, detail="BitBrowser is not running")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to close browser: {str(e)}")
+
+async def batch_import_accounts(db: AsyncSession, raw_text: str):
+    """批量导入 FB 账号"""
+    success_count = 0
+    fail_count = 0
+    errors = []
+    
+    lines = raw_text.strip().split('\n')
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            continue
+            
+        try:
+            # 解析 UID:密码:2FA密钥:邮箱:邮箱密码:Cookie:浏览器ProfileID
+            # 按照建议：先从左取前 5 个字段（username, password, totp, email, email_password）
+            # 剩余部分包含 Cookie 和 ProfileID
+            parts = line.split(":", 5)
+            if len(parts) < 6:
+                raise ValueError("Format error: Not enough fields (expected at least 6 parts)")
+                
+            username = parts[0].strip()
+            password = parts[1].strip()
+            totp_secret = parts[2].strip()
+            email = parts[3].strip()
+            email_password = parts[4].strip()
+            
+            rest = parts[5]
+            # 从右边找最后一个 : 分割 Cookie 和 ProfileID
+            last_colon_index = rest.rfind(":")
+            if last_colon_index == -1:
+                 # 如果没有冒号，说明缺少 ProfileID 或者 Cookie 格式不对
+                 # 这里假设必须有 ProfileID，哪怕为空也应该有分隔符？
+                 # 根据示例数据，最后是 :ProfileID
+                 raise ValueError("Format error: Cannot separate Cookie and ProfileID")
+            
+            cookie = rest[:last_colon_index].strip()
+            browser_profile_id = rest[last_colon_index+1:].strip()
+            
+            # 检查 username 是否存在
+            stmt = select(FBAccount).where(FBAccount.username == username)
+            result = await db.execute(stmt)
+            if result.scalar_one_or_none():
+                raise ValueError(f"Username {username} already exists")
+                
+            # 查找并自动绑定窗口
+            browser_window_id = None
+            notes = None
+            if browser_profile_id:
+                stmt_win = select(BrowserWindow).where(BrowserWindow.bit_window_id == browser_profile_id)
+                res_win = await db.execute(stmt_win)
+                win = res_win.scalar_one_or_none()
+                if win:
+                    # 检查窗口是否被占用
+                    if win.status == "空闲":
+                        browser_window_id = win.id
+                        win.status = "使用中"
+                        db.add(win)
+                    else:
+                         notes = f"Browser Profile {browser_profile_id} found but busy/bound."
+                else:
+                    notes = f"Browser Profile {browser_profile_id} not found."
+            
+            new_account = FBAccount(
+                username=username,
+                password_encrypted=encrypt_value(password),
+                totp_secret_encrypted=encrypt_value(totp_secret) if totp_secret else None,
+                email=email,
+                email_password_encrypted=encrypt_value(email_password),
+                cookie_encrypted=encrypt_value(cookie),
+                region="US", # Default
+                status="待养号",
+                browser_window_id=browser_window_id,
+                notes=notes
+            )
+            db.add(new_account)
+            success_count += 1
+            
+        except Exception as e:
+            fail_count += 1
+            errors.append({"line": i + 1, "reason": str(e)})
+            
+    await db.commit()
+    return {"success_count": success_count, "fail_count": fail_count, "errors": errors}
+
+async def batch_import_proxies(db: AsyncSession, raw_text: str):
+    """批量导入代理 IP"""
+    success_count = 0
+    fail_count = 0
+    errors = []
+    
+    lines = raw_text.strip().split('\n')
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            continue
+            
+        try:
+            # IP地址:端口:用户名:密码
+            parts = line.split(":")
+            if len(parts) < 2:
+                raise ValueError("Format error: Host:Port required")
+                
+            host = parts[0].strip()
+            try:
+                port = int(parts[1].strip())
+            except ValueError:
+                raise ValueError("Port must be integer")
+                
+            username = parts[2].strip() if len(parts) > 2 else None
+            password = parts[3].strip() if len(parts) > 3 else None
+            
+            # 检查重复
+            stmt = select(ProxyIP).where(and_(ProxyIP.host == host, ProxyIP.port == port))
+            result = await db.execute(stmt)
+            if result.scalar_one_or_none():
+                raise ValueError(f"Proxy {host}:{port} already exists")
+                
+            new_proxy = ProxyIP(
+                host=host,
+                port=port,
+                username=username,
+                password_encrypted=encrypt_value(password) if password else None,
+                type="socks5",
+                status="空闲"
+            )
+            db.add(new_proxy)
+            success_count += 1
+            
+        except Exception as e:
+            fail_count += 1
+            errors.append({"line": i + 1, "reason": str(e)})
+            
+    await db.commit()
+    return {"success_count": success_count, "fail_count": fail_count, "errors": errors}
+
+async def delete_browser_window(db: AsyncSession, window_id: int):
+    """删除浏览器窗口记录"""
+    window = await db.get(BrowserWindow, window_id)
+    if not window:
+        raise HTTPException(status_code=404, detail="Window not found")
+        
+    # 检查是否有绑定账号
+    stmt = select(FBAccount).where(FBAccount.browser_window_id == window.id, FBAccount.is_deleted == False)
+    result = await db.execute(stmt)
+    bound_account = result.scalar_one_or_none()
+    
+    if bound_account:
+        raise HTTPException(status_code=400, detail=f"该窗口仍被账号 {bound_account.username} 绑定，请先解绑")
+        
+    await db.delete(window)
+    await db.commit()
+    return True

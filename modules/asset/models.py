@@ -20,6 +20,7 @@ class FBAccount(Base):
     nurture_day = Column(Integer, default=0)
     nurture_start_date = Column(Date, nullable=True)
     totp_secret_encrypted = Column(String, nullable=True)
+    cookie_encrypted = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_active_at = Column(DateTime, default=datetime.utcnow)
     notes = Column(Text, nullable=True)
