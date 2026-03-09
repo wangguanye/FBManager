@@ -21,6 +21,8 @@ with open("config.yaml", "r", encoding="utf-8") as f:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    os.makedirs(os.path.join("assets", "avatars"), exist_ok=True)
+    os.makedirs(os.path.join("assets", "covers"), exist_ok=True)
     # 启动时自动建表
     logger.info("正在初始化数据库表...")
     async with engine.begin() as conn:
@@ -111,7 +113,7 @@ async def rpa_page(request: Request):
 @app.get("/assets")
 async def assets_page(request: Request):
     """资源管理页面"""
-    return templates.TemplateResponse("base.html", {"request": request, "title": "资源管理"})
+    return templates.TemplateResponse("assets.html", {"request": request, "title": "语料 & 素材"})
 
 if __name__ == "__main__":
     # 仅监听 127.0.0.1:8000

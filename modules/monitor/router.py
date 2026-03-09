@@ -4,8 +4,6 @@ from typing import List, Optional
 from datetime import datetime, date
 from db.database import get_db
 from modules.monitor import service, schemas
-from modules.monitor.models import ActionLog
-
 router = APIRouter()
 
 @router.get("/logs", response_model=List[schemas.ActionLog])
@@ -13,6 +11,7 @@ async def list_logs(
     page: int = 1, 
     size: int = 50, 
     account_id: Optional[int] = None,
+    task_id: Optional[int] = None,
     level: Optional[str] = None,
     date_start: Optional[datetime] = None,
     date_end: Optional[datetime] = None,
@@ -29,6 +28,7 @@ async def list_logs(
         skip=skip, 
         limit=size, 
         account_id=account_id, 
+        task_id=task_id,
         level=level, 
         date_start=date_start, 
         date_end=date_end, 
@@ -37,26 +37,25 @@ async def list_logs(
     )
     return logs
 
-@router.get("/alerts", response_model=List[schemas.ActionLog])
+@router.get("/alerts", response_model=List[schemas.Alert])
 async def list_alerts(db: AsyncSession = Depends(get_db)):
-    """
-    获取未处理告警（level 为 ERROR 或 CRITICAL 且未 dismiss 的日志）
-    """
     alerts = await service.get_alerts(db)
     return alerts
 
-@router.post("/alerts/{id}/dismiss", response_model=schemas.ActionLog)
+@router.post("/alerts/{id}/dismiss", response_model=schemas.Alert)
 async def dismiss_alert(
     id: int = Path(..., description="Alert ID"),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    标记告警已处理
-    """
-    alert = await service.dismiss_alert(db, log_id=id)
+    alert = await service.dismiss_alert(db, alert_id=id)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     return alert
+
+@router.get("/alerts/count", response_model=schemas.AlertCount)
+async def get_alert_count(db: AsyncSession = Depends(get_db)):
+    counts = await service.get_alert_counts(db)
+    return counts
 
 @router.get("/dashboard/stats", response_model=schemas.DashboardStats)
 async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):

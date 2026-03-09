@@ -70,6 +70,12 @@
                         </a>
                     </li>
                     <li>
+                        <a href="/assets" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
+                            <span class="inline-flex justify-center items-center h-6 w-6">🧰</span>
+                            <span x-show="sidebarOpen" class="ml-3">语料 & 素材</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="/logs" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
                             <span class="inline-flex justify-center items-center h-6 w-6">📋</span>
                             <span x-show="sidebarOpen" class="ml-3">操作日志</span>
@@ -113,5 +119,40 @@
             </main>
         </div>
     </div>
+    <div x-data x-cloak class="fixed top-6 right-6 z-50">
+        <div x-show="$store.toast.visible" x-transition.opacity.duration.200ms
+             class="px-4 py-2 rounded-lg shadow-lg text-sm text-white"
+             :class="{
+                'bg-blue-500': $store.toast.type === 'info',
+                'bg-yellow-500': $store.toast.type === 'warn',
+                'bg-red-500': $store.toast.type === 'error'
+             }"
+             x-text="$store.toast.message">
+        </div>
+    </div>
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('toast', {
+                visible: false,
+                message: '',
+                type: 'info',
+                _timer: null,
+                show(message, type = 'info') {
+                    this.message = message
+                    this.type = type
+                    this.visible = true
+                    if (this._timer) clearTimeout(this._timer)
+                    this._timer = setTimeout(() => {
+                        this.visible = false
+                    }, 3000)
+                }
+            })
+        })
+        window.showToast = (message, type = 'info') => {
+            if (window.Alpine && Alpine.store('toast')) {
+                Alpine.store('toast').show(message, type)
+            }
+        }
+    </script>
 </body>
 </html>

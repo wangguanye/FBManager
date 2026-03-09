@@ -1,6 +1,9 @@
 import yaml
 import os
 from loguru import logger
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from modules.monitor.models import NurtureTask
 
 CONFIG_PATH = "config.yaml"
 
@@ -11,31 +14,55 @@ def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-def get_tasks_for_day(day_number: int) -> dict:
-    """
-    根据天数获取养号任务模板
-    :param day_number: 养号第几天
-    :return: {once_tasks: [], daily_tasks: [], online_minutes: int}
-    """
+def load_sop_for_day(day_number: int) -> dict:
+    assert day_number > 0
     config = load_config()
     sop_config = config.get("nurture_sop", {})
-    
-    max_days = sop_config.get("max_days", 0)
     days_config = sop_config.get("days", {})
-    default_config = sop_config.get("default", {
-        "online_minutes": 30,
-        "once_tasks": [],
-        "daily_tasks": []
-    })
+    day_config = None
 
-    if day_number <= max_days:
-        day_config = days_config.get(day_number, default_config)
-    else:
-        # 超过最大配置天数，使用默认配置
-        day_config = default_config
-        
+    if day_number in days_config:
+        day_config = days_config.get(day_number)
+    elif str(day_number) in days_config:
+        day_config = days_config.get(str(day_number))
+
+    if not day_config:
+        for config_item in days_config.values():
+            if isinstance(config_item, dict) and config_item.get("is_default") is True:
+                day_config = config_item
+                break
+
+    if not day_config:
+        day_config = sop_config.get("default")
+
+    if not day_config:
+        day_config = {"online_minutes": 0, "once_tasks": [], "daily_tasks": []}
+
+    return day_config
+
+def get_daily_tasks(day_number: int) -> list[dict]:
+    sop = load_sop_for_day(day_number)
+    return sop.get("daily_tasks", [])
+
+def get_once_tasks(day_number: int) -> list[dict]:
+    sop = load_sop_for_day(day_number)
+    return sop.get("once_tasks", [])
+
+async def is_task_completed(db: AsyncSession, account_id: int, day_number: int, action: str) -> bool:
+    assert day_number > 0
+    stmt = select(NurtureTask.id).where(
+        NurtureTask.fb_account_id == account_id,
+        NurtureTask.day_number == day_number,
+        NurtureTask.action == action,
+        NurtureTask.status == "completed"
+    ).limit(1)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none() is not None
+
+def get_tasks_for_day(day_number: int) -> dict:
+    sop = load_sop_for_day(day_number)
     return {
-        "once_tasks": day_config.get("once_tasks", []),
-        "daily_tasks": day_config.get("daily_tasks", []),
-        "online_minutes": day_config.get("online_minutes", 0)
+        "once_tasks": sop.get("once_tasks", []),
+        "daily_tasks": sop.get("daily_tasks", []),
+        "online_minutes": sop.get("online_minutes", 0)
     }

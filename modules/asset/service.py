@@ -1,12 +1,15 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, or_, and_, func
 from sqlalchemy.orm import selectinload
-from modules.asset.models import FBAccount, ProxyIP, BrowserWindow
-from modules.asset.schemas import FBAccountCreate, FBAccountUpdate, FBAccountBind, ProxyIPCreate, ProxyIPUpdate, BrowserWindowCreate
+from modules.asset.models import FBAccount, ProxyIP, BrowserWindow, CommentPool, AvatarAsset
+from modules.asset.schemas import FBAccountCreate, FBAccountUpdate, FBAccountBind, ProxyIPCreate, ProxyIPUpdate, BrowserWindowCreate, CommentCreate
 from core.crypto import encrypt_value
-from core.cascade import update_account_status_cascade
+from core.cascade import cascade_on_ban, cascade_on_recovery
 from fastapi import HTTPException
 from modules.rpa.browser_client import BitBrowserClient, BitBrowserNotRunningError
+from datetime import datetime
+import os
+from uuid import uuid4
 
 async def create_fb_account(db: AsyncSession, account: FBAccountCreate):
     """创建 FB 账号并加密敏感信息"""
@@ -62,12 +65,16 @@ async def update_fb_account(db: AsyncSession, account_id: int, update_data: FBAc
     account = await get_fb_account_by_id(db, account_id)
     if not account:
         return None
-    
-    # 检查状态变更并触发级联
+
+    previous_status = account.status
+    warning_message = None
+
     if update_data.status and update_data.status != account.status:
-        # 如果是封禁，触发级联
-        if update_data.status == "已封禁":
-            await update_account_status_cascade(db, account_id, "已封禁")
+        if update_data.status == "banned":
+            warning_message = "账号将被封禁并触发级联禁用代理与窗口"
+            await cascade_on_ban(db, account_id)
+        elif previous_status in ["abnormal", "异常"] and update_data.status in ["nurturing", "养号中"]:
+            await cascade_on_recovery(db, account_id)
         account.status = update_data.status
 
     if update_data.username is not None:
@@ -94,7 +101,7 @@ async def update_fb_account(db: AsyncSession, account_id: int, update_data: FBAc
     db.add(account)
     await db.flush()
     await db.refresh(account)
-    return account
+    return {"account": account, "warning": warning_message}
 
 async def delete_fb_account(db: AsyncSession, account_id: int):
     """软删除账号"""
@@ -498,3 +505,165 @@ async def delete_proxy(db: AsyncSession, proxy_id: int):
     await db.delete(proxy)
     await db.commit()
     return True
+
+async def get_comments(db: AsyncSession, language: str = None, category: str = None):
+    stmt = select(CommentPool)
+    if language:
+        stmt = stmt.where(CommentPool.language == language)
+    if category:
+        stmt = stmt.where(CommentPool.category == category)
+    stmt = stmt.order_by(CommentPool.use_count.asc())
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+async def create_comment(db: AsyncSession, data: CommentCreate):
+    comment = CommentPool(
+        content=data.content,
+        language=data.language,
+        category=data.category
+    )
+    db.add(comment)
+    await db.flush()
+    await db.refresh(comment)
+    return comment
+
+async def batch_create_comments(db: AsyncSession, items: list[CommentCreate]) -> int:
+    success_count = 0
+    for item in items:
+        comment = CommentPool(
+            content=item.content,
+            language=item.language,
+            category=item.category
+        )
+        db.add(comment)
+        success_count += 1
+    await db.commit()
+    return success_count
+
+async def update_comment(db: AsyncSession, comment_id: int, data: CommentCreate):
+    comment = await db.get(CommentPool, comment_id)
+    if not comment:
+        return None
+    comment.content = data.content
+    comment.language = data.language
+    comment.category = data.category
+    db.add(comment)
+    await db.flush()
+    await db.refresh(comment)
+    return comment
+
+async def delete_comment(db: AsyncSession, comment_id: int) -> bool:
+    comment = await db.get(CommentPool, comment_id)
+    if not comment:
+        return False
+    await db.delete(comment)
+    await db.commit()
+    return True
+
+async def pick_comment(db: AsyncSession, language: str = "en"):
+    stmt = (
+        select(CommentPool)
+        .where(CommentPool.language == language)
+        .order_by(CommentPool.use_count.asc(), func.random())
+        .limit(1)
+        .with_for_update()
+    )
+    result = await db.execute(stmt)
+    comment = result.scalar_one_or_none()
+    if not comment:
+        return None
+    comment.use_count += 1
+    comment.last_used_at = datetime.utcnow()
+    db.add(comment)
+    await db.commit()
+    await db.refresh(comment)
+    return comment
+
+async def upload_avatars(db: AsyncSession, files, asset_type: str):
+    if asset_type not in ["avatar", "cover"]:
+        raise HTTPException(status_code=400, detail="Invalid type")
+    if not files:
+        return []
+    target_dir = "assets/avatars" if asset_type == "avatar" else "assets/covers"
+    os.makedirs(target_dir, exist_ok=True)
+    allowed_extensions = {".jpg", ".jpeg", ".png"}
+    max_size = 5 * 1024 * 1024
+    created_items = []
+    for file in files:
+        original_name = file.filename or ""
+        extension = os.path.splitext(original_name)[1].lower()
+        if extension not in allowed_extensions:
+            raise HTTPException(status_code=400, detail="Invalid file type")
+        content = await file.read()
+        if len(content) > max_size:
+            raise HTTPException(status_code=400, detail="File too large")
+        new_name = f"{uuid4().hex}{extension}"
+        relative_path = os.path.join(target_dir, new_name).replace("\\", "/")
+        absolute_path = os.path.join(target_dir, new_name)
+        with open(absolute_path, "wb") as out_file:
+            out_file.write(content)
+        avatar = AvatarAsset(
+            file_path=relative_path,
+            original_filename=original_name,
+            type=asset_type,
+            is_used=False
+        )
+        db.add(avatar)
+        created_items.append(avatar)
+    await db.commit()
+    for avatar in created_items:
+        await db.refresh(avatar)
+    return created_items
+
+async def get_avatars(db: AsyncSession, asset_type: str = None, is_used: bool = None):
+    stmt = select(AvatarAsset)
+    if asset_type:
+        stmt = stmt.where(AvatarAsset.type == asset_type)
+    if is_used is not None:
+        stmt = stmt.where(AvatarAsset.is_used == is_used)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+async def delete_avatar(db: AsyncSession, avatar_id: int):
+    avatar = await db.get(AvatarAsset, avatar_id)
+    if not avatar:
+        return None
+    if avatar.used_by_account_id is not None:
+        return False
+    absolute_path = avatar.file_path.replace("/", os.sep)
+    if os.path.exists(absolute_path):
+        try:
+            os.remove(absolute_path)
+        except OSError:
+            raise HTTPException(status_code=500, detail="Failed to delete file")
+    await db.delete(avatar)
+    await db.commit()
+    return True
+
+async def pick_avatar(db: AsyncSession, asset_type: str = "avatar"):
+    stmt = (
+        select(AvatarAsset)
+        .where(AvatarAsset.is_used == False, AvatarAsset.type == asset_type)
+        .order_by(func.random())
+        .limit(1)
+        .with_for_update()
+    )
+    result = await db.execute(stmt)
+    avatar = result.scalar_one_or_none()
+    if not avatar:
+        return None
+    avatar.is_used = True
+    db.add(avatar)
+    await db.commit()
+    await db.refresh(avatar)
+    return avatar
+
+async def release_avatar(db: AsyncSession, account_id: int):
+    stmt = select(AvatarAsset).where(AvatarAsset.used_by_account_id == account_id)
+    result = await db.execute(stmt)
+    avatars = result.scalars().all()
+    for avatar in avatars:
+        avatar.is_used = False
+        avatar.used_by_account_id = None
+        db.add(avatar)
+    await db.commit()

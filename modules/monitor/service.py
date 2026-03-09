@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, and_
-from modules.monitor.models import NurtureTask, ActionLog
+from modules.monitor.models import NurtureTask, ActionLog, Alert
 from modules.asset.models import FBAccount
 from modules.monitor.schemas import NurtureTaskCreate, ActionLogBase, DashboardStats
 from loguru import logger
@@ -74,6 +74,7 @@ async def get_action_logs(
     skip: int = 0, 
     limit: int = 50,
     account_id: Optional[int] = None,
+    task_id: Optional[int] = None,
     level: Optional[str] = None,
     date_start: Optional[datetime] = None,
     date_end: Optional[datetime] = None,
@@ -85,6 +86,8 @@ async def get_action_logs(
     
     if account_id:
         query = query.where(ActionLog.fb_account_id == account_id)
+    if task_id:
+        query = query.where(ActionLog.task_id == task_id)
     if level:
         if "," in level:
             levels = level.split(",")
@@ -105,25 +108,92 @@ async def get_action_logs(
     result = await db.execute(query)
     return result.scalars().all()
 
-async def get_alerts(db: AsyncSession):
-    """未处理告警（level 为 ERROR 或 CRITICAL 且未 dismiss 的日志）"""
-    query = select(ActionLog).where(
-        ActionLog.level.in_(["ERROR", "CRITICAL"]),
-        ActionLog.is_dismissed == False
-    ).order_by(desc(ActionLog.created_at))
-    result = await db.execute(query)
-    return result.scalars().all()
+async def create_alert(db: AsyncSession, fb_account_id: Optional[int], level: str, title: str, message: str) -> Alert | None:
+    stmt_exist = select(Alert.id).where(
+        and_(
+            Alert.fb_account_id == fb_account_id,
+            Alert.level == level,
+            Alert.title == title,
+            Alert.is_dismissed == False
+        )
+    ).order_by(desc(Alert.created_at)).limit(1)
+    result_exist = await db.execute(stmt_exist)
+    if result_exist.scalar_one_or_none():
+        return None
+    alert = Alert(
+        fb_account_id=fb_account_id,
+        level=level,
+        title=title,
+        message=message
+    )
+    db.add(alert)
+    await db.flush()
+    return alert
 
-async def dismiss_alert(db: AsyncSession, log_id: int):
-    """标记告警已处理"""
-    query = select(ActionLog).where(ActionLog.id == log_id)
+async def get_alerts(db: AsyncSession):
+    query = select(Alert, FBAccount.username).outerjoin(
+        FBAccount, Alert.fb_account_id == FBAccount.id
+    ).where(
+        Alert.is_dismissed == False
+    ).order_by(desc(Alert.created_at))
     result = await db.execute(query)
-    log = result.scalar_one_or_none()
-    if log:
-        log.is_dismissed = True
+    alerts = []
+    for alert, username in result.all():
+        alerts.append({
+            "id": alert.id,
+            "fb_account_id": alert.fb_account_id,
+            "account_username": username,
+            "level": alert.level,
+            "title": alert.title,
+            "message": alert.message,
+            "is_dismissed": alert.is_dismissed,
+            "created_at": alert.created_at,
+            "dismissed_at": alert.dismissed_at
+        })
+    return alerts
+
+async def dismiss_alert(db: AsyncSession, alert_id: int):
+    query = select(Alert).where(Alert.id == alert_id)
+    result = await db.execute(query)
+    alert = result.scalar_one_or_none()
+    if alert:
+        alert.is_dismissed = True
+        alert.dismissed_at = datetime.utcnow()
         await db.commit()
-        await db.refresh(log)
-    return log
+        await db.refresh(alert)
+        return {
+            "id": alert.id,
+            "fb_account_id": alert.fb_account_id,
+            "account_username": None,
+            "level": alert.level,
+            "title": alert.title,
+            "message": alert.message,
+            "is_dismissed": alert.is_dismissed,
+            "created_at": alert.created_at,
+            "dismissed_at": alert.dismissed_at
+        }
+    return None
+
+async def get_alert_counts(db: AsyncSession) -> dict:
+    stmt_total = select(func.count(Alert.id)).where(Alert.is_dismissed == False)
+    total_res = await db.execute(stmt_total)
+    total = total_res.scalar() or 0
+
+    stmt_error = select(func.count(Alert.id)).where(
+        Alert.is_dismissed == False,
+        Alert.level == "ERROR"
+    )
+    error_res = await db.execute(stmt_error)
+    error = error_res.scalar() or 0
+
+    stmt_critical = select(func.count(Alert.id)).where(
+        Alert.is_dismissed == False,
+        Alert.level == "CRITICAL"
+    )
+    critical_res = await db.execute(stmt_critical)
+    critical = critical_res.scalar() or 0
+
+    return {"total": total, "error": error, "critical": critical}
 
 async def get_dashboard_stats(db: AsyncSession) -> DashboardStats:
     """获取仪表盘统计数据"""
@@ -156,9 +226,9 @@ async def get_dashboard_stats(db: AsyncSession) -> DashboardStats:
     active_rpa_count = active_res.scalar() or 0
     
     # Alert Count
-    alert_query = select(func.count(ActionLog.id)).where(
-        ActionLog.level.in_(["ERROR", "CRITICAL"]),
-        ActionLog.is_dismissed == False
+    alert_query = select(func.count(Alert.id)).where(
+        Alert.level.in_(["ERROR", "CRITICAL"]),
+        Alert.is_dismissed == False
     )
     alert_res = await db.execute(alert_query)
     alert_count = alert_res.scalar() or 0

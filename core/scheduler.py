@@ -5,9 +5,11 @@ from db.database import AsyncSessionLocal
 from modules.nurture.service import generate_daily_tasks, check_and_execute_tasks, check_manual_task_timeout
 from loguru import logger
 from datetime import datetime
+import yaml
 
 # APScheduler 调度器实例
 scheduler = AsyncIOScheduler()
+DEFAULT_MAX_CONCURRENT_WINDOWS = 5
 
 async def job_generate_daily_tasks():
     """
@@ -88,11 +90,20 @@ def get_scheduler_status():
     next_run = None
     if scheduler.get_job("generate_tasks"):
         next_run = scheduler.get_job("generate_tasks").next_run_time
+    max_concurrent_windows = DEFAULT_MAX_CONCURRENT_WINDOWS
+    try:
+        with open("config.yaml", "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        scheduler_config = config.get("scheduler", {})
+        max_concurrent_windows = int(scheduler_config.get("max_concurrent_windows", DEFAULT_MAX_CONCURRENT_WINDOWS))
+    except Exception:
+        pass
         
     return {
         "running": scheduler.running and (scheduler.state != 2), # 2 is PAUSED state in APScheduler? No, state is separate.
         # APScheduler running property returns True if start() was called and not shutdown.
         # Check if paused:
         "paused": scheduler.state == 2, # STATE_PAUSED = 2
-        "next_run_generate": next_run
+        "next_run_generate": next_run,
+        "max_concurrent_windows": max_concurrent_windows
     }

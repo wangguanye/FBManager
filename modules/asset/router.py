@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from db.database import get_db
 from modules.asset import service, schemas
 from modules.rpa.browser_client import BitBrowserNotRunningError
@@ -30,17 +30,18 @@ async def list_accounts(
     """账号列表，支持筛选和搜索"""
     return await service.get_fb_accounts(db, skip, limit, status, q)
 
-@router.patch("/accounts/{id}", response_model=schemas.FBAccount)
+@router.patch("/accounts/{id}", response_model=Dict[str, Any])
 async def update_account(
     id: int, 
     update_data: schemas.FBAccountUpdate, 
     db: AsyncSession = Depends(get_db)
 ):
     """编辑账号信息/状态"""
-    account = await service.update_fb_account(db, id, update_data)
-    if not account:
+    result = await service.update_fb_account(db, id, update_data)
+    if not result:
         raise HTTPException(status_code=404, detail="Account not found")
-    return account
+    warning_message = result.get("warning")
+    return {"code": 0, "data": result.get("account"), "warning": warning_message}
 
 @router.delete("/accounts/{id}")
 async def delete_account(id: int, db: AsyncSession = Depends(get_db)):
@@ -95,6 +96,63 @@ async def update_proxy(
 async def delete_proxy(id: int, db: AsyncSession = Depends(get_db)):
     """删除代理 IP"""
     await service.delete_proxy(db, id)
+    return None
+
+@router.get("/comments", response_model=List[schemas.CommentOut], tags=["Comments"])
+async def list_comments(
+    language: Optional[str] = None,
+    category: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    return await service.get_comments(db, language, category)
+
+@router.post("/comments", response_model=schemas.CommentOut, tags=["Comments"])
+async def create_comment(data: schemas.CommentCreate, db: AsyncSession = Depends(get_db)):
+    return await service.create_comment(db, data)
+
+@router.post("/comments/batch", tags=["Comments"])
+async def batch_create_comments(data: schemas.CommentBatchImport, db: AsyncSession = Depends(get_db)):
+    success_count = await service.batch_create_comments(db, data.items)
+    return {"success_count": success_count}
+
+@router.patch("/comments/{id}", response_model=schemas.CommentOut, tags=["Comments"])
+async def update_comment(id: int, data: schemas.CommentCreate, db: AsyncSession = Depends(get_db)):
+    comment = await service.update_comment(db, id, data)
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    return comment
+
+@router.delete("/comments/{id}", status_code=204, tags=["Comments"])
+async def delete_comment(id: int, db: AsyncSession = Depends(get_db)):
+    success = await service.delete_comment(db, id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    return None
+
+@router.post("/avatars/upload", tags=["Avatars"])
+async def upload_avatars(
+    files: List[UploadFile] = File(...),
+    type: str = Form("avatar"),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    items = await service.upload_avatars(db, files, type)
+    return {"uploaded": len(items), "items": items}
+
+@router.get("/avatars", response_model=List[schemas.AvatarOut], tags=["Avatars"])
+async def list_avatars(
+    type: Optional[str] = None,
+    is_used: Optional[bool] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    return await service.get_avatars(db, type, is_used)
+
+@router.delete("/avatars/{id}", status_code=204, tags=["Avatars"])
+async def delete_avatar(id: int, db: AsyncSession = Depends(get_db)):
+    result = await service.delete_avatar(db, id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Avatar not found")
+    if result is False:
+        raise HTTPException(status_code=400, detail="Avatar is in use")
     return None
 
 # Browser Windows

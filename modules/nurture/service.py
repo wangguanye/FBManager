@@ -8,7 +8,8 @@ from typing import List, Optional
 
 from modules.asset.models import FBAccount
 from modules.monitor.models import NurtureTask, ActionLog
-from modules.nurture.sop_loader import get_tasks_for_day
+from modules.monitor.service import create_alert
+from modules.nurture.sop_loader import get_daily_tasks, get_once_tasks, is_task_completed
 from db.database import AsyncSessionLocal
 from loguru import logger
 import yaml
@@ -20,6 +21,15 @@ async def get_scheduler_config():
         return config.get("scheduler", {})
     except Exception as e:
         logger.error(f"Failed to load scheduler config: {e}")
+        return {}
+
+async def get_manual_timeout_config():
+    try:
+        with open("config.yaml", "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        return config.get("manual_task_timeout", {})
+    except Exception as e:
+        logger.error(f"Failed to load manual timeout config: {e}")
         return {}
 
 async def generate_daily_tasks(db: AsyncSession):
@@ -37,6 +47,8 @@ async def generate_daily_tasks(db: AsyncSession):
     
     today = datetime.now().date()
     sched_config = await get_scheduler_config()
+    manual_timeout_config = await get_manual_timeout_config()
+    block_hours = manual_timeout_config.get("block_hours", 72)
     
     # 活跃窗口配置
     active_start_hour = sched_config.get("active_window_start", 8)
@@ -45,63 +57,75 @@ async def generate_daily_tasks(db: AsyncSession):
     tasks_created = 0
     
     for account in accounts:
-        # 1. 计算 nurture_day
         if not account.nurture_start_date:
             account.nurture_start_date = today
-            account.nurture_day = 1
-        else:
-            days_diff = (today - account.nurture_start_date).days
-            account.nurture_day = days_diff + 1
-            
-        # 2. 获取 SOP
-        sop = get_tasks_for_day(account.nurture_day)
-        
-        # 准备任务列表
+
+        day_number = (today - account.nurture_start_date).days + 1
+        account.nurture_day = day_number
+        db.add(account)
+
         tasks_to_create = []
-        
-        # 3. 处理 once_tasks (一次性任务)
-        # 检查前置依赖：如果 day > 1，检查前一天的 once 任务是否全部完成
+
         can_create_once = True
-        if account.nurture_day > 1:
-            prev_day = account.nurture_day - 1
+        if day_number > 1:
+            prev_day = day_number - 1
             stmt_prev = select(func.count()).where(
                 and_(
                     NurtureTask.fb_account_id == account.id,
                     NurtureTask.day_number == prev_day,
-                    NurtureTask.task_type == "once",
+                    NurtureTask.task_type == "manual",
                     NurtureTask.status != "completed"
                 )
             )
             result_prev = await db.execute(stmt_prev)
             pending_prev = result_prev.scalar()
             if pending_prev > 0:
-                logger.warning(f"账号 {account.username} 第 {prev_day} 天一次性任务未完成，跳过第 {account.nurture_day} 天一次性任务")
+                can_create_once = False
+
+        if can_create_once and block_hours:
+            block_threshold = datetime.utcnow() - timedelta(hours=block_hours)
+            stmt_block = select(func.count()).where(
+                and_(
+                    NurtureTask.fb_account_id == account.id,
+                    NurtureTask.task_type == "manual",
+                    NurtureTask.status == "pending",
+                    NurtureTask.created_at <= block_threshold
+                )
+            )
+            result_block = await db.execute(stmt_block)
+            if (result_block.scalar() or 0) > 0:
                 can_create_once = False
 
         if can_create_once:
-            for task_def in sop.get("once_tasks", []):
+            for task_def in get_once_tasks(day_number):
                 action = task_def.get("action")
+                if not action:
+                    continue
+                if await is_task_completed(db, account.id, day_number, action):
+                    continue
                 stmt_exist = select(NurtureTask).where(
                     and_(
                         NurtureTask.fb_account_id == account.id,
-                        NurtureTask.day_number == account.nurture_day,
-                        NurtureTask.task_type == "once",
+                        NurtureTask.day_number == day_number,
+                        NurtureTask.task_type.in_(["once", "manual"]),
                         NurtureTask.action == action
                     )
                 )
                 result_exist = await db.execute(stmt_exist)
                 if result_exist.scalar():
                     continue
-                    
+                execution_type = task_def.get("execution_type") or task_def.get("type") or "auto"
+                task_type = "manual" if execution_type == "manual" else "once"
                 tasks_to_create.append({
                     "action": action,
-                    "task_type": "once",
-                    "execution_type": task_def.get("execution_type", "auto")
+                    "task_type": task_type,
+                    "execution_type": execution_type
                 })
 
-        # 4. 处理 daily_tasks
-        for task_def in sop.get("daily_tasks", []):
+        for task_def in get_daily_tasks(day_number):
             action = task_def.get("action")
+            if not action:
+                continue
             stmt_exist = select(NurtureTask).where(
                 and_(
                     NurtureTask.fb_account_id == account.id,
@@ -113,11 +137,11 @@ async def generate_daily_tasks(db: AsyncSession):
             result_exist = await db.execute(stmt_exist)
             if result_exist.scalar():
                 continue
-                
+            execution_type = task_def.get("execution_type") or task_def.get("type") or "auto"
             tasks_to_create.append({
                 "action": action,
                 "task_type": "daily",
-                "execution_type": task_def.get("execution_type", "auto")
+                "execution_type": execution_type
             })
 
         # 5. 写入数据库并分配时间
@@ -222,79 +246,13 @@ async def execute_account_tasks(account_id: int):
             actions = [{"action": action_name, "params": {}}]
             
             try:
-                # 调用 RPA 执行器
-                # execute_account_tasks 是被后台调度的，可以 await
-                # RPAExecutor.run_task 内部会处理浏览器启动/关闭逻辑吗？
-                # run_task 似乎只负责执行，不负责任务状态更新（虽然它有 task 参数用于日志）
-                # 我们需要根据执行结果更新 task 状态
-                
-                # 修改 run_task 以返回结果？或者我们在 service 层捕获异常？
-                # RPAExecutor.run_task 目前返回 None，且内部捕获了大部分异常只打印日志
-                # 我们需要修改 executor 吗？或者在这里只能做到触发执行？
-                # 用户要求：根据执行结果更新 task 状态为 completed 或 failed
-                
-                # 暂时假设 run_task 会抛出异常或者我们需要通过日志判断？
-                # 查看 executor.py，run_task 内部捕获了异常并记录日志，但没有返回值。
-                # 这有点问题。为了满足 P1 要求，我应该让 run_task 返回状态，或者在这里 wrap 一下。
-                # 但用户只让我改 service.py "调用 executor.run_task(account, task, actions)"
-                # "根据执行结果更新 task 状态为 completed 或 failed"
-                
-                # 如果 executor.run_task 不抛出异常且不返回结果，我无法知道成功与否。
-                # 让我们假设 executor.run_task 是可靠的，如果它没报错（它内部 catch 了），算成功？
-                # 不，executor 内部 catch 异常后只是 return。
-                
-                # 鉴于不能改 executor.py (未在 P1 列表中明确要求改 executor)，
-                # 我只能尽力而为。但 "根据执行结果" 强示暗示我需要结果。
-                # 实际上，executor.py 的 run_task 没有返回值。
-                # 我将假设 run_task 执行成功（如果它没抛出未捕获的异常）。
-                # 或者我应该修改 executor.py？ P1 第 5 点说 "串联 RPA 执行器"，主要是 service.py。
-                # 但为了逻辑完整，我可能需要稍微改动 executor.py 让它返回结果，或者假设它总是成功（这不安全）。
-                
-                # 仔细看 executor.py 代码：
-                # 它在 action_instance.execute 后有 status = "success" ...
-                # 但 run_task 方法本身没有返回这个 status。
-                
-                # 我决定：在调用 run_task 后，默认为 completed，除非我能在 executor 中加返回值。
-                # 既然我是 autonomous pair-programmer，为了 fix bug，我可以改 executor.py。
-                # 但首先完成 service.py 的替换。
-                
                 await executor.run_task(account, task, actions)
-                
-                # 假定成功，因为 executor 内部吞掉了错误... 
-                # 这确实是个缺陷，但先把流程串起来。
-                # 为了更严谨，我应该去 executor.py 加个返回值。
-                # 但现在先按 "串联" 要求写 service.py。
-                
-                task.status = "completed"
-                task.executed_at = datetime.now()
-                task.result_log = "Executed via RPAExecutor"
-                
-                # 记录日志
-                log = ActionLog(
-                    fb_account_id=account_id,
-                    task_id=task.id,
-                    action_type=task.action,
-                    level="INFO",
-                    message=f"任务 {task.action} 执行完成"
-                )
-                db.add(log)
-                
             except Exception as e:
                 logger.error(f"Task {task.id} execution failed: {e}")
                 task.status = "failed"
                 task.result_log = str(e)
                 task.retry_count += 1
-                
-                log = ActionLog(
-                    fb_account_id=account_id,
-                    task_id=task.id,
-                    action_type=task.action,
-                    level="ERROR",
-                    message=f"任务 {task.action} 执行失败: {e}"
-                )
-                db.add(log)
-            
-            await db.commit() # 及时提交状态
+                await db.commit()
             
         logger.info(f"账号 {account_id} 任务执行完毕")
 
@@ -424,42 +382,72 @@ async def check_manual_task_timeout():
     """
     logger.info("Checking for overdue manual tasks...")
     async with AsyncSessionLocal() as db:
-        # 定义超时阈值：计划时间超过 4 小时未完成
-        timeout_threshold = datetime.now() - timedelta(hours=4)
-        
-        # 查找超时且未完成的手动任务
+        manual_timeout_config = await get_manual_timeout_config()
+        warn_hours = manual_timeout_config.get("warn_hours", 24)
+        alert_hours = manual_timeout_config.get("alert_hours", 48)
+        block_hours = manual_timeout_config.get("block_hours", 72)
+        now = datetime.utcnow()
+
         stmt = select(NurtureTask).where(
             and_(
-                NurtureTask.execution_type == "manual",
-                NurtureTask.status.in_(["pending", "in_progress"]),
-                NurtureTask.scheduled_time < timeout_threshold
+                NurtureTask.task_type == "manual",
+                NurtureTask.status == "pending"
             )
         )
         result = await db.execute(stmt)
-        overdue_tasks = result.scalars().all()
-        
-        for task in overdue_tasks:
-            # 检查是否已经记录过超时警告
-            stmt_log = select(ActionLog).where(
+        pending_tasks = result.scalars().all()
+
+        async def has_timeout_log(task_id: int, level: str) -> bool:
+            stmt_log = select(ActionLog.id).where(
                 and_(
-                    ActionLog.task_id == task.id,
-                    ActionLog.action_type == "timeout_check",
-                    ActionLog.level == "WARN"
+                    ActionLog.task_id == task_id,
+                    ActionLog.action_type == "manual_timeout",
+                    ActionLog.level == level
                 )
-            )
+            ).limit(1)
             res_log = await db.execute(stmt_log)
-            if res_log.scalar_one_or_none():
+            return res_log.scalar_one_or_none() is not None
+
+        for task in pending_tasks:
+            if not task.created_at:
                 continue
-                
-            # 记录警告日志
-            log_entry = ActionLog(
-                fb_account_id=task.fb_account_id,
-                task_id=task.id,
-                action_type="timeout_check",
-                level="WARN",
-                message=f"手动任务超时提醒: {task.action} (计划时间: {task.scheduled_time})"
-            )
-            db.add(log_entry)
-            logger.warning(f"Task {task.id} (Account {task.fb_account_id}) is overdue.")
-            
+            hours_elapsed = (now - task.created_at).total_seconds() / 3600
+            timeout_days = max(1, int(hours_elapsed // 24))
+
+            if block_hours and hours_elapsed >= block_hours:
+                if not await has_timeout_log(task.id, "ERROR"):
+                    log_entry = ActionLog(
+                        fb_account_id=task.fb_account_id,
+                        task_id=task.id,
+                        action_type="manual_timeout",
+                        level="ERROR",
+                        message=f"人工待办已超时 {timeout_days} 天，后续一次性任务已暂停"
+                    )
+                    db.add(log_entry)
+                logger.error(f"Manual task {task.id} blocked after {hours_elapsed:.2f}h")
+            elif alert_hours and hours_elapsed >= alert_hours:
+                if not await has_timeout_log(task.id, "WARN"):
+                    log_entry = ActionLog(
+                        fb_account_id=task.fb_account_id,
+                        task_id=task.id,
+                        action_type="manual_timeout",
+                        level="WARN",
+                        message=f"人工待办已超时 {timeout_days} 天"
+                    )
+                    db.add(log_entry)
+                await create_alert(
+                    db,
+                    task.fb_account_id,
+                    "WARN",
+                    "人工待办超时",
+                    f"人工待办已超时 {timeout_days} 天"
+                )
+                logger.warning(f"Manual task {task.id} alert after {hours_elapsed:.2f}h")
+
+            if warn_hours and hours_elapsed >= warn_hours:
+                timeout_log = f"manual_timeout: 已超时 {timeout_days} 天"
+                if task.result_log != timeout_log:
+                    task.result_log = timeout_log
+                    db.add(task)
+
         await db.commit()

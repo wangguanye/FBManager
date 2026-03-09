@@ -1,0 +1,535 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="assetsManager()" x-init="init()" class="space-y-6">
+    <div class="bg-white rounded-lg shadow p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div class="flex items-center gap-2">
+            <button @click="setTab('comments')" class="px-4 py-2 rounded-lg text-sm font-semibold border" :class="activeTab === 'comments' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-200'">评论语料库</button>
+            <button @click="setTab('avatars')" class="px-4 py-2 rounded-lg text-sm font-semibold border" :class="activeTab === 'avatars' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-200'">头像素材库</button>
+        </div>
+        <div class="text-sm text-gray-500" x-text="activeTab === 'comments' ? '管理评论语料与批量导入' : '管理头像与封面素材'"></div>
+    </div>
+
+    <div x-show="activeTab === 'comments'" x-cloak class="space-y-6">
+        <div class="bg-white rounded-lg shadow p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-3">
+                <button @click="openCreateCommentModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2">
+                    <span>+ 新增语料</span>
+                </button>
+                <button @click="openBatchCommentModal()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                    <span>📥 批量导入</span>
+                </button>
+                <div class="relative">
+                    <select x-model="commentLanguageFilter" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                        <option value="">全部语言</option>
+                        <option value="en">en</option>
+                        <option value="zh">zh</option>
+                        <option value="other">其他</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+                <div class="relative">
+                    <select x-model="commentCategoryFilter" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                        <option value="">全部分类</option>
+                        <option value="fitness">fitness</option>
+                        <option value="lifestyle">lifestyle</option>
+                        <option value="general">general</option>
+                        <option value="other">其他</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+            </div>
+            <div class="text-sm text-gray-500">
+                <span x-text="`共 ${filteredComments.length} 条语料，平均使用 ${commentAverageUse} 次`"></span>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">语料内容</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">语言</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">分类</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">使用次数</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最近使用</th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <template x-for="comment in filteredComments" :key="comment.id">
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="comment.id"></td>
+                            <td class="px-6 py-4 text-sm text-gray-900 max-w-md">
+                                <div class="truncate" :title="comment.content" x-text="truncateText(comment.content)"></div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="comment.language || '-'"></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="comment.category || '-'"></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="comment.use_count ?? 0"></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(comment.last_used_at)"></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button @click="openEditCommentModal(comment)" class="text-indigo-600 hover:text-indigo-900 mr-3">编辑</button>
+                                <button @click="deleteComment(comment)" class="text-red-600 hover:text-red-900">删除</button>
+                            </td>
+                        </tr>
+                    </template>
+                    <tr x-show="filteredComments.length === 0">
+                        <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">暂无语料数据</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'avatars'" x-cloak class="space-y-6">
+        <div class="bg-white rounded-lg shadow p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-3">
+                <button @click="triggerUpload('avatar')" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2">
+                    <span>📤 上传头像</span>
+                </button>
+                <button @click="triggerUpload('cover')" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2">
+                    <span>📤 上传封面</span>
+                </button>
+                <input x-ref="avatarInput" type="file" accept="image/*" multiple class="hidden" @change="handleAvatarUpload">
+                <div class="relative">
+                    <select x-model="avatarTypeFilter" @change="fetchAvatars()" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                        <option value="">全部类型</option>
+                        <option value="avatar">头像</option>
+                        <option value="cover">封面</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+                <div class="relative">
+                    <select x-model="avatarUsageFilter" @change="fetchAvatars()" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                        <option value="">全部状态</option>
+                        <option value="unused">未使用</option>
+                        <option value="used">已使用</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+            </div>
+            <div class="text-sm text-gray-500">
+                <span x-text="`共 ${avatars.length} 张素材，已使用 ${usedAvatarsCount} 张，可用 ${availableAvatarsCount} 张`"></span>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                <template x-for="avatar in avatars" :key="avatar.id">
+                    <div class="border rounded-lg p-3 relative group">
+                        <div class="flex items-center justify-center">
+                            <img :src="getAvatarUrl(avatar)" alt="avatar" class="w-[120px] h-[120px] object-cover rounded-md cursor-pointer" @click="openAvatarModal(avatar)" @mouseenter="hoveredAvatarId = avatar.id" @mouseleave="hoveredAvatarId = null">
+                        </div>
+                        <div class="mt-2 text-xs text-gray-600 space-y-1">
+                            <div class="flex items-center justify-between">
+                                <span :class="avatar.is_used ? 'text-red-600' : 'text-green-600'" x-text="avatar.is_used ? '已使用 🔴' : '未使用 🟢'"></span>
+                                <span x-text="avatar.type === 'cover' ? '封面' : '头像'"></span>
+                            </div>
+                            <div class="text-gray-500" x-text="avatar.used_by_account_id ? `账号 ${avatar.used_by_account_id}` : '未绑定'"></div>
+                        </div>
+                        <button @click.stop="deleteAvatar(avatar)" class="mt-2 w-full text-xs py-1 rounded border" :class="isAvatarLocked(avatar) ? 'text-gray-400 border-gray-200 cursor-not-allowed' : 'text-red-600 border-red-200 hover:bg-red-50'" :disabled="isAvatarLocked(avatar)" :title="isAvatarLocked(avatar) ? '已绑定账号，无法删除' : '删除素材'">删除</button>
+                        <div x-show="hoveredAvatarId === avatar.id" class="absolute z-20 -top-2 left-1/2 -translate-x-1/2 -translate-y-full bg-white p-2 rounded-lg shadow-lg">
+                            <img :src="getAvatarUrl(avatar)" alt="preview" class="w-56 h-56 object-cover rounded-md">
+                        </div>
+                    </div>
+                </template>
+                <div x-show="avatars.length === 0" class="col-span-full text-center text-sm text-gray-500 py-8">暂无素材数据</div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showCommentModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeCommentModal()"></div>
+            <div class="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4" x-text="commentModalMode === 'create' ? '新增语料' : '编辑语料'"></h3>
+                <form @submit.prevent="saveComment">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">语料内容</label>
+                            <textarea x-model="commentForm.content" rows="4" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"></textarea>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">语言</label>
+                                <select x-model="commentForm.language" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                    <option value="en">en</option>
+                                    <option value="zh">zh</option>
+                                    <option value="other">其他</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">分类</label>
+                                <input type="text" x-model="commentForm.category" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button type="button" @click="closeCommentModal()" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showBatchModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeBatchModal()"></div>
+            <div class="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">批量导入语料</h3>
+                <form @submit.prevent="submitBatchImport">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">语料内容（每行一条）</label>
+                            <textarea x-model="batchForm.text" rows="6" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"></textarea>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">语言</label>
+                                <select x-model="batchForm.language" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                    <option value="en">en</option>
+                                    <option value="zh">zh</option>
+                                    <option value="other">其他</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">分类</label>
+                                <input type="text" x-model="batchForm.category" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button type="button" @click="closeBatchModal()" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700">导入</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showAvatarModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeAvatarModal()"></div>
+            <div class="inline-block w-full max-w-xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium leading-6 text-gray-900">素材详情</h3>
+                    <button @click="closeAvatarModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                <div class="flex flex-col items-center gap-4">
+                    <img :src="selectedAvatar ? getAvatarUrl(selectedAvatar) : ''" alt="avatar" class="w-72 h-72 object-cover rounded-lg">
+                    <div class="text-sm text-gray-600 w-full space-y-1">
+                        <div class="flex justify-between">
+                            <span>类型</span>
+                            <span x-text="selectedAvatar ? (selectedAvatar.type === 'cover' ? '封面' : '头像') : '-'"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>使用状态</span>
+                            <span x-text="selectedAvatar ? (selectedAvatar.is_used ? '已使用' : '未使用') : '-'"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>绑定账号</span>
+                            <span x-text="selectedAvatar && selectedAvatar.used_by_account_id ? `账号 ${selectedAvatar.used_by_account_id}` : '未绑定'"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>文件名</span>
+                            <span x-text="selectedAvatar ? (selectedAvatar.original_filename || '-') : '-'"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>创建时间</span>
+                            <span x-text="selectedAvatar ? formatDate(selectedAvatar.created_at) : '-'"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function assetsManager() {
+    return {
+        activeTab: 'comments',
+        comments: [],
+        commentLanguageFilter: '',
+        commentCategoryFilter: '',
+        commentPreviewLimit: 50,
+        showCommentModal: false,
+        commentModalMode: 'create',
+        commentForm: { id: null, content: '', language: 'en', category: '' },
+        showBatchModal: false,
+        batchForm: { text: '', language: 'en', category: '' },
+        avatars: [],
+        avatarTypeFilter: '',
+        avatarUsageFilter: '',
+        uploadType: 'avatar',
+        hoveredAvatarId: null,
+        showAvatarModal: false,
+        selectedAvatar: null,
+
+        init() {
+            const navItem = document.querySelector('a[href="/assets"]');
+            if (navItem) navItem.classList.add('bg-indigo-700');
+            this.fetchComments();
+            this.fetchAvatars();
+        },
+
+        setTab(tab) {
+            this.activeTab = tab;
+        },
+
+        get filteredComments() {
+            return this.comments.filter((comment) => {
+                const isLanguageMatch = this.commentLanguageFilter
+                    ? this.commentLanguageFilter === 'other'
+                        ? !['en', 'zh'].includes((comment.language || '').toLowerCase())
+                        : (comment.language || '').toLowerCase() === this.commentLanguageFilter
+                    : true;
+                const isCategoryMatch = this.commentCategoryFilter
+                    ? this.commentCategoryFilter === 'other'
+                        ? !['fitness', 'lifestyle', 'general'].includes((comment.category || '').toLowerCase())
+                        : (comment.category || '').toLowerCase() === this.commentCategoryFilter
+                    : true;
+                return isLanguageMatch && isCategoryMatch;
+            });
+        },
+
+        get commentAverageUse() {
+            if (this.filteredComments.length === 0) return '0';
+            const totalUse = this.filteredComments.reduce((sum, item) => sum + (item.use_count || 0), 0);
+            return (totalUse / this.filteredComments.length).toFixed(1);
+        },
+
+        get usedAvatarsCount() {
+            return this.avatars.filter(item => item.is_used).length;
+        },
+
+        get availableAvatarsCount() {
+            return this.avatars.filter(item => !item.is_used).length;
+        },
+
+        async fetchComments() {
+            try {
+                const res = await fetch('/api/comments');
+                if (res.ok) this.comments = await res.json();
+            } catch (e) {
+                console.error(e);
+            }
+        },
+
+        openCreateCommentModal() {
+            this.commentModalMode = 'create';
+            this.commentForm = { id: null, content: '', language: 'en', category: '' };
+            this.showCommentModal = true;
+        },
+
+        openEditCommentModal(comment) {
+            this.commentModalMode = 'edit';
+            this.commentForm = {
+                id: comment.id,
+                content: comment.content,
+                language: comment.language || 'en',
+                category: comment.category || ''
+            };
+            this.showCommentModal = true;
+        },
+
+        closeCommentModal() {
+            this.showCommentModal = false;
+        },
+
+        async saveComment() {
+            if (!this.commentForm.content.trim()) {
+                alert('请填写语料内容');
+                return;
+            }
+            const payload = {
+                content: this.commentForm.content,
+                language: this.commentForm.language,
+                category: this.commentForm.category || null
+            };
+            try {
+                if (this.commentModalMode === 'create') {
+                    const res = await fetch('/api/comments', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (res.ok) {
+                        this.closeCommentModal();
+                        this.fetchComments();
+                    } else {
+                        alert('新增失败');
+                    }
+                } else {
+                    const res = await fetch(`/api/comments/${this.commentForm.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (res.ok) {
+                        const updated = await res.json();
+                        this.comments = this.comments.map(item => item.id === updated.id ? updated : item);
+                        this.closeCommentModal();
+                    } else {
+                        alert('更新失败');
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                alert('请求失败');
+            }
+        },
+
+        openBatchCommentModal() {
+            this.batchForm = { text: '', language: 'en', category: '' };
+            this.showBatchModal = true;
+        },
+
+        closeBatchModal() {
+            this.showBatchModal = false;
+        },
+
+        async submitBatchImport() {
+            const lines = this.batchForm.text.split('\n').map(item => item.trim()).filter(Boolean);
+            if (lines.length === 0) {
+                alert('请填写语料内容');
+                return;
+            }
+            const items = lines.map(item => ({
+                content: item,
+                language: this.batchForm.language,
+                category: this.batchForm.category || null
+            }));
+            try {
+                const res = await fetch('/api/comments/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items })
+                });
+                if (res.ok) {
+                    this.closeBatchModal();
+                    this.fetchComments();
+                } else {
+                    alert('导入失败');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('请求失败');
+            }
+        },
+
+        async deleteComment(comment) {
+            if (!confirm('确认删除该语料吗？')) return;
+            try {
+                const res = await fetch(`/api/comments/${comment.id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    this.comments = this.comments.filter(item => item.id !== comment.id);
+                } else {
+                    alert('删除失败');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('请求失败');
+            }
+        },
+
+        truncateText(text) {
+            if (!text) return '';
+            return text.length > this.commentPreviewLimit ? `${text.slice(0, this.commentPreviewLimit)}...` : text;
+        },
+
+        formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleString('zh-CN', { hour12: false });
+        },
+
+        async fetchAvatars() {
+            try {
+                const params = new URLSearchParams();
+                if (this.avatarTypeFilter) params.append('type', this.avatarTypeFilter);
+                if (this.avatarUsageFilter) params.append('is_used', this.avatarUsageFilter === 'used');
+                const res = await fetch(`/api/avatars?${params.toString()}`);
+                if (res.ok) this.avatars = await res.json();
+            } catch (e) {
+                console.error(e);
+            }
+        },
+
+        triggerUpload(type) {
+            this.uploadType = type;
+            this.$refs.avatarInput.click();
+        },
+
+        async handleAvatarUpload(event) {
+            const files = Array.from(event.target.files || []);
+            if (files.length === 0) return;
+            const formData = new FormData();
+            files.forEach(file => formData.append('files', file));
+            formData.append('type', this.uploadType);
+            try {
+                const res = await fetch('/api/avatars/upload', { method: 'POST', body: formData });
+                if (res.ok) {
+                    this.fetchAvatars();
+                } else {
+                    const err = await res.json();
+                    alert(err.detail || '上传失败');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('上传失败');
+            } finally {
+                event.target.value = '';
+            }
+        },
+
+        isAvatarLocked(avatar) {
+            return avatar.used_by_account_id !== null || avatar.is_used;
+        },
+
+        async deleteAvatar(avatar) {
+            if (this.isAvatarLocked(avatar)) return;
+            if (!confirm('确认删除该素材吗？')) return;
+            try {
+                const res = await fetch(`/api/avatars/${avatar.id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    this.avatars = this.avatars.filter(item => item.id !== avatar.id);
+                } else {
+                    const err = await res.json();
+                    alert(err.detail || '删除失败');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('请求失败');
+            }
+        },
+
+        getAvatarUrl(avatar) {
+            if (!avatar || !avatar.file_path) return '';
+            if (avatar.file_path.startsWith('/')) return avatar.file_path;
+            return `/${avatar.file_path}`;
+        },
+
+        openAvatarModal(avatar) {
+            this.selectedAvatar = avatar;
+            this.showAvatarModal = true;
+        },
+
+        closeAvatarModal() {
+            this.showAvatarModal = false;
+            this.selectedAvatar = null;
+        }
+    }
+}
+</script>
+{% endblock %}

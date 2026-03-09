@@ -2,3 +2,11 @@ from modules.rpa.actions.scroll_feed import ScrollFeedAction
 from modules.rpa.actions.like_post import LikePostAction
 from modules.rpa.actions.watch_reels import WatchReelsAction
 from modules.rpa.actions.check_status import CheckStatusAction
+from modules.rpa.actions.add_friend import AddFriendAction
+from modules.rpa.actions.comment_post import CommentPostAction
+from modules.rpa.actions.join_group import JoinGroupAction
+from modules.rpa.actions.post_to_timeline import PostToTimelineAction
+from modules.rpa.actions.oauth_login import OAuthLoginAction
+from modules.rpa.actions.update_profile import UpdateProfileAction
+from modules.rpa.actions.upload_avatar import UploadAvatarAction
+from modules.rpa.actions.enable_2fa import Enable2FAAction

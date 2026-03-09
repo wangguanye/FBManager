@@ -116,20 +116,41 @@ class FBAccount(FBAccountBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-class CommentPoolBase(BaseModel):
+class CommentCreate(BaseModel):
     content: str
     language: str = "en"
     category: Optional[str] = None
 
-class CommentPoolCreate(CommentPoolBase):
-    pass
+class CommentBatchImport(BaseModel):
+    items: List[CommentCreate]
 
-class CommentPool(CommentPoolBase):
+class CommentOut(BaseModel):
     id: int
+    content: str
+    language: str
+    category: Optional[str] = None
     use_count: int
     last_used_at: Optional[datetime] = None
+    created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 class AvatarAssetBase(BaseModel):
     file_path: str
+    original_filename: Optional[str] = None
+    type: str = "avatar"
+
+class AvatarAsset(AvatarAssetBase):
+    id: int
+    is_used: bool
+    used_by_account_id: Optional[int] = None
+    model_config = ConfigDict(from_attributes=True)
+
+class AvatarOut(BaseModel):
+    id: int
+    file_path: str
+    original_filename: Optional[str] = None
     type: str
+    is_used: bool
+    used_by_account_id: Optional[int] = None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)

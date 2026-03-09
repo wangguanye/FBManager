@@ -10,23 +10,20 @@
         </button>
     </div>
 
-    <!-- 顶部4个统计卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <!-- 账号状态分布 -->
         <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-gray-500 text-sm font-medium">账号状态分布</h3>
-            <div class="mt-2 grid grid-cols-2 gap-2">
-                 <template x-for="(count, status) in stats.account_stats" :key="status">
-                    <div class="text-center bg-gray-50 p-2 rounded">
-                        <div class="text-xl font-bold text-indigo-600" x-text="count"></div>
-                        <div class="text-xs text-gray-500" x-text="status"></div>
-                    </div>
+            <h3 class="text-gray-500 text-sm font-medium">账号总数</h3>
+            <div class="mt-3 grid grid-cols-2 gap-3">
+                 <template x-for="config in accountStatusConfig" :key="config.key">
+                    <a class="bg-gray-50 p-2 rounded block hover:bg-gray-100"
+                       :href="`/accounts?status=${encodeURIComponent(config.key)}`">
+                        <div class="text-xl font-bold" :class="config.color" x-text="stats.account_stats[config.key] || 0"></div>
+                        <div class="text-xs text-gray-500" x-text="config.label"></div>
+                    </a>
                  </template>
-                 <div x-show="Object.keys(stats.account_stats).length === 0" class="col-span-2 text-center text-gray-400 text-sm">暂无数据</div>
             </div>
         </div>
 
-        <!-- 今日任务 -->
         <div class="bg-white rounded-lg shadow p-6">
             <h3 class="text-gray-500 text-sm font-medium">今日任务</h3>
             <div class="mt-2 flex justify-between items-end">
@@ -37,17 +34,19 @@
                 <div class="text-right text-sm">
                     <div class="text-green-600">完成: <span x-text="stats.task_stats.completed || 0"></span></div>
                     <div class="text-red-600">失败: <span x-text="stats.task_stats.failed || 0"></span></div>
-                    <div class="text-yellow-600">待办: <span x-text="stats.task_stats.pending || 0"></span></div>
                 </div>
             </div>
         </div>
 
-        <!-- 活跃 RPA -->
         <div class="bg-white rounded-lg shadow p-6 flex items-center justify-between">
             <div>
-                <h3 class="text-gray-500 text-sm font-medium">活跃 RPA</h3>
-                <div class="mt-2 text-3xl font-bold text-blue-600" x-text="stats.active_rpa_count || 0"></div>
-                <div class="text-xs text-gray-500">运行中任务</div>
+                <h3 class="text-gray-500 text-sm font-medium">活跃 RPA 进程</h3>
+                <div class="mt-2 text-3xl font-bold text-blue-600">
+                    <span x-text="stats.active_rpa_count || 0"></span>
+                    <span class="text-sm text-gray-500">/</span>
+                    <span class="text-sm text-gray-500" x-text="schedulerStatus.max_concurrent_windows || 0"></span>
+                </div>
+                <div class="text-xs text-gray-500">当前活跃 / 最大并发</div>
             </div>
             <div class="p-3 rounded-full bg-blue-100 text-blue-600">
                 <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -56,12 +55,11 @@
             </div>
         </div>
 
-        <!-- 未处理告警 -->
         <div class="bg-white rounded-lg shadow p-6 flex items-center justify-between">
             <div>
                 <h3 class="text-gray-500 text-sm font-medium">未处理告警</h3>
-                <div class="mt-2 text-3xl font-bold text-red-600" x-text="stats.alert_count || 0"></div>
-                <div class="text-xs text-gray-500">需关注</div>
+                <div class="mt-2 text-3xl font-bold text-red-600" x-text="alertCounts.error + alertCounts.critical"></div>
+                <div class="text-xs text-gray-500">ERROR + CRITICAL</div>
             </div>
             <div class="p-3 rounded-full bg-red-100 text-red-600">
                 <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,30 +120,48 @@
                 <h3 class="text-lg font-medium text-gray-900">异常告警</h3>
                 <span class="text-xs text-gray-500" x-text="'共 ' + alerts.length + ' 条'"></span>
             </div>
-            <div class="flex-grow overflow-auto p-4 space-y-4">
-                <template x-for="alert in alerts" :key="alert.id">
-                    <div class="bg-red-50 border-l-4 border-red-500 p-4 relative rounded-r-md transition-all duration-300">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <p class="text-sm font-bold text-red-700" x-text="alert.level"></p>
-                                <p class="text-xs text-red-500 mt-1" x-text="formatDate(alert.created_at)"></p>
-                            </div>
-                            <button @click="dismissAlert(alert.id)" class="text-red-400 hover:text-red-600 focus:outline-none" title="标记已处理">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                </svg>
-                            </button>
-                        </div>
-                        <p class="mt-2 text-sm text-red-800 break-words" x-text="alert.message"></p>
-                        <div class="mt-2 text-xs text-red-600 flex space-x-2">
-                            <span x-show="alert.fb_account_id">账号: <span x-text="alert.fb_account_id"></span></span>
-                            <span x-show="alert.task_id">任务: <span x-text="alert.task_id"></span></span>
-                        </div>
-                    </div>
-                </template>
-                <div x-show="alerts.length === 0" class="text-center text-gray-500 py-10">
-                    暂无未处理告警
-                </div>
+            <div class="flex-grow overflow-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-50 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-2 text-left font-medium text-gray-500">时间</th>
+                            <th class="px-4 py-2 text-left font-medium text-gray-500">账号名</th>
+                            <th class="px-4 py-2 text-left font-medium text-gray-500">级别</th>
+                            <th class="px-4 py-2 text-left font-medium text-gray-500">告警内容</th>
+                            <th class="px-4 py-2 text-right font-medium text-gray-500">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        <template x-for="alert in alerts" :key="alert.id">
+                            <template>
+                                <tr x-show="!dismissedAlertIds.has(alert.id)" x-transition.opacity.duration.300ms
+                                    :class="getAlertRowClass(alert)">
+                                    <td class="px-4 py-2 whitespace-nowrap text-gray-600" x-text="formatDate(alert.created_at)"></td>
+                                    <td class="px-4 py-2 text-gray-700" x-text="alert.account_username || '-'"></td>
+                                    <td class="px-4 py-2">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                              :class="getAlertBadgeClass(alert)">
+                                            <span x-text="alert.level"></span>
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-2 text-gray-800">
+                                        <div class="font-medium" x-text="alert.title"></div>
+                                    </td>
+                                    <td class="px-4 py-2 text-right space-x-2">
+                                        <button class="text-indigo-600 hover:text-indigo-800" @click="toggleAlertDetail(alert.id)">查看详情</button>
+                                        <button class="text-gray-500 hover:text-gray-700" @click="dismissAlert(alert.id)">关闭</button>
+                                    </td>
+                                </tr>
+                                <tr x-show="expandedAlertId === alert.id && !dismissedAlertIds.has(alert.id)" class="bg-white">
+                                    <td colspan="5" class="px-4 py-3 text-gray-700 break-all" x-text="alert.message"></td>
+                                </tr>
+                            </template>
+                        </template>
+                        <tr x-show="alerts.length === 0">
+                            <td colspan="5" class="px-6 py-6 text-center text-gray-500">暂无未处理告警</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -155,13 +171,14 @@
         <h3 class="text-lg font-medium text-gray-900 mb-4" x-show="manualTasks.length > 0">人工待办任务</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             <template x-for="task in manualTasks" :key="task.id">
-                <div class="bg-yellow-50 border border-yellow-200 rounded-lg shadow p-4 relative">
+                <div class="rounded-lg shadow p-4 relative" :class="getManualCardClass(task)">
                     <div class="flex justify-between items-start mb-2">
-                        <h4 class="font-bold text-yellow-800">人工待办</h4>
-                        <span class="text-xs text-yellow-600 bg-yellow-100 px-2 py-1 rounded">ID: <span x-text="task.id"></span></span>
+                        <h4 class="font-bold text-gray-800">人工待办</h4>
+                        <span class="text-xs text-gray-600 bg-white/70 px-2 py-1 rounded">ID: <span x-text="task.id"></span></span>
                     </div>
-                    <p class="text-sm text-yellow-700 mb-2">账号ID: <span x-text="task.fb_account_id"></span></p>
-                    <p class="text-sm text-yellow-700 mb-4">类型: <span x-text="task.task_type"></span></p>
+                    <p class="text-sm text-gray-700 mb-2">账号ID: <span x-text="task.fb_account_id"></span></p>
+                    <p class="text-sm text-gray-700 mb-2">类型: <span x-text="task.task_type"></span></p>
+                    <p class="text-xs mb-4" :class="getManualTimeoutTextClass(task)" x-text="getManualTimeoutLabel(task) || '状态正常'"></p>
                     <button class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
                             @click="completeTask(task.id)">
                         确认完成
@@ -183,6 +200,19 @@ function dashboard() {
         },
         alerts: [],
         todayTasks: [], 
+        schedulerStatus: { running: false, paused: false, next_run_generate: null, max_concurrent_windows: 0 },
+        alertCounts: { total: 0, error: 0, critical: 0 },
+        lastAlertId: null,
+        expandedAlertId: null,
+        dismissedAlertIds: new Set(),
+        accountStatusConfig: [
+            { key: '待养号', label: '待养号', color: 'text-blue-600' },
+            { key: '养号中', label: '养号中', color: 'text-yellow-600' },
+            { key: '养号就绪', label: '养号就绪', color: 'text-green-600' },
+            { key: '投放养号中', label: '投放养号中✨', color: 'text-green-600' },
+            { key: '异常', label: '异常', color: 'text-orange-600' },
+            { key: '已封禁', label: '已封禁', color: 'text-red-600' }
+        ],
         
         get manualTasks() {
             return this.todayTasks.filter(t => t.execution_type === 'manual' && t.status === 'pending');
@@ -191,12 +221,20 @@ function dashboard() {
         init() {
             this.fetchAll();
             setInterval(() => {
-                this.fetchAll();
+                this.fetchRealtime();
             }, 30000); // 30秒自动刷新
         },
         
         fetchAll() {
             this.fetchStats();
+            this.fetchAlertCounts();
+            this.fetchSchedulerStatus();
+            this.fetchAlerts();
+            this.fetchTodayTasks();
+        },
+        fetchRealtime() {
+            this.fetchAlertCounts();
+            this.fetchSchedulerStatus();
             this.fetchAlerts();
             this.fetchTodayTasks();
         },
@@ -210,27 +248,130 @@ function dashboard() {
         async fetchAlerts() {
             try {
                 const res = await fetch('/api/alerts');
-                if (res.ok) this.alerts = await res.json();
+                if (res.ok) {
+                    const data = await res.json();
+                    this.alerts = data;
+                    this.checkAlertToast();
+                }
+            } catch (e) { console.error(e); }
+        },
+        async fetchAlertCounts() {
+            try {
+                const res = await fetch('/api/alerts/count');
+                if (res.ok) this.alertCounts = await res.json();
+            } catch (e) { console.error(e); }
+        },
+        async fetchSchedulerStatus() {
+            try {
+                const res = await fetch('/api/scheduler/status');
+                if (res.ok) this.schedulerStatus = await res.json();
             } catch (e) { console.error(e); }
         },
         async fetchTodayTasks() {
             try {
-                const res = await fetch('/api/dashboard/tasks?size=100'); 
-                if (res.ok) this.todayTasks = await res.json();
+                const params = new URLSearchParams({ date: this.getTodayDate() });
+                const res = await fetch(`/api/tasks/today?${params.toString()}`);
+                if (res.ok) {
+                    this.todayTasks = await res.json();
+                    this.showManualTimeoutToast();
+                }
             } catch (e) { console.error(e); }
         },
         async dismissAlert(id) {
             try {
                 const res = await fetch(`/api/alerts/${id}/dismiss`, { method: 'POST' });
                 if (res.ok) {
-                    this.alerts = this.alerts.filter(a => a.id !== id);
-                    this.stats.alert_count = Math.max(0, this.stats.alert_count - 1);
+                    this.dismissedAlertIds.add(id);
+                    showToast('告警已关闭', 'info');
+                    this.fetchAlertCounts();
                 }
             } catch (e) { console.error(e); }
         },
         async completeTask(id) {
-            alert('功能待开发：确认完成任务 ' + id);
-            // Future implementation: POST /api/tasks/{id}/complete
+            if (!confirm('确认该人工任务已完成？')) return;
+            try {
+                const res = await fetch(`/api/tasks/${id}/complete`, { method: 'POST' });
+                if (res.ok) {
+                    this.todayTasks = this.todayTasks.filter(task => task.id !== id);
+                    showToast('人工待办已完成', 'info');
+                } else {
+                    showToast('操作失败', 'error');
+                }
+            } catch (e) { console.error(e); }
+        },
+        toggleAlertDetail(id) {
+            this.expandedAlertId = this.expandedAlertId === id ? null : id;
+        },
+        getManualTimeoutHours(task) {
+            if (!task || !task.created_at) return 0;
+            const createdAt = new Date(task.created_at);
+            return (Date.now() - createdAt.getTime()) / 3600000;
+        },
+        getManualTimeoutLevel(task) {
+            const hoursElapsed = this.getManualTimeoutHours(task);
+            if (hoursElapsed >= 72) return 'block';
+            if (hoursElapsed >= 48) return 'alert';
+            if (hoursElapsed >= 24) return 'warn';
+            return '';
+        },
+        getManualTimeoutLabel(task) {
+            const level = this.getManualTimeoutLevel(task);
+            if (!level) return '';
+            const hoursElapsed = this.getManualTimeoutHours(task);
+            const days = Math.max(1, Math.floor(hoursElapsed / 24));
+            if (level === 'block') return `🚨 已超时 ${days} 天，后续任务已暂停`;
+            return `⏰ 已超时 ${days} 天`;
+        },
+        getManualTimeoutTextClass(task) {
+            const level = this.getManualTimeoutLevel(task);
+            if (level === 'block') return 'text-red-700';
+            if (level === 'alert') return 'text-orange-800';
+            if (level === 'warn') return 'text-orange-600';
+            return 'text-gray-500';
+        },
+        getManualCardClass(task) {
+            const level = this.getManualTimeoutLevel(task);
+            if (level === 'block') return 'bg-red-100 animate-pulse border border-red-300';
+            if (level === 'alert') return 'bg-orange-100 border border-orange-200';
+            if (level === 'warn') return 'bg-white border border-orange-300';
+            return 'bg-white border border-gray-200';
+        },
+        showManualTimeoutToast() {
+            const hasAlert = this.manualTasks.some(task => this.getManualTimeoutLevel(task) === 'alert');
+            if (!hasAlert) return;
+            showToast('人工待办已超时 48 小时，请尽快处理', 'warn');
+        },
+        checkAlertToast() {
+            if (this.alerts.length === 0) return;
+            const latest = this.alerts[0];
+            if (!this.lastAlertId) {
+                this.lastAlertId = latest.id;
+                return;
+            }
+            if (latest.id !== this.lastAlertId) {
+                const toastType = latest.level === 'WARN' ? 'warn' : 'error';
+                showToast(`${latest.title}: ${latest.message}`, toastType);
+                this.lastAlertId = latest.id;
+            }
+        },
+        getAlertBadgeClass(alert) {
+            if (alert.level === 'CRITICAL') return 'bg-red-600 text-white';
+            if (alert.level === 'ERROR') return 'bg-red-100 text-red-800';
+            if (alert.level === 'WARN') return 'bg-yellow-100 text-yellow-800';
+            return 'bg-blue-100 text-blue-800';
+        },
+        getAlertRowClass(alert) {
+            if (alert.level === 'CRITICAL') return 'bg-red-100';
+            if (alert.level === 'ERROR') return 'bg-red-50';
+            if (alert.level === 'WARN') return 'bg-yellow-50';
+            return '';
+        },
+        getTodayDate() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = `${now.getMonth() + 1}`.padStart(2, '0');
+            const day = `${now.getDate()}`.padStart(2, '0');
+            return `${year}-${month}-${day}`;
         },
         formatDate(dateStr) {
             if (!dateStr) return '-';
@@ -244,12 +385,12 @@ function dashboard() {
                     const res = await fetch('/api/system/backup', { method: 'POST' });
                     const data = await res.json();
                     if (data.code === 0) {
-                        alert('备份成功: ' + data.msg);
+                        showToast('备份成功: ' + data.msg, 'info');
                     } else {
-                        alert('备份失败: ' + data.msg);
+                        showToast('备份失败: ' + data.msg, 'error');
                     }
                 } catch (e) {
-                    alert('备份请求出错: ' + e);
+                    showToast('备份请求出错', 'error');
                 }
             }
         }

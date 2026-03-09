@@ -83,21 +83,26 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     <template x-for="task in filteredTasks" :key="task.id">
-                        <tr :class="{'bg-yellow-50': task.execution_type === 'manual' && task.status === 'pending'}">
+                        <tr @click="toggleLogs(task)" class="cursor-pointer" :class="getTaskRowClass(task)">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="task.id"></td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600">
-                                <a :href="'/accounts?id=' + task.fb_account_id" x-text="'Account ' + task.fb_account_id"></a>
+                                <a @click.stop :href="'/accounts?id=' + task.fb_account_id" x-text="'Account ' + task.fb_account_id"></a>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="'Day ' + task.day_number"></td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="task.action"></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                <div x-text="task.action"></div>
+                                <div x-show="task.execution_type === 'manual' && task.status === 'pending'" class="text-xs text-yellow-700 mt-1">⚠️ 需手动完成</div>
+                                <div x-show="getManualTimeoutLabel(task)" class="text-xs mt-1" :class="getManualTimeoutTextClass(task)" x-text="getManualTimeoutLabel(task)"></div>
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex space-x-1">
                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                                          :class="task.execution_type === 'auto' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'"
+                                          :class="task.execution_type === 'auto' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'"
                                           x-text="task.execution_type === 'auto' ? '🤖 自动' : '✋ 人工'">
                                     </span>
                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800"
-                                          x-text="task.task_type === 'once' ? '一次性' : '🔄 每日'">
+                                          :class="task.task_type === 'daily' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
+                                          x-text="task.task_type === 'daily' ? '🔄 每日' : '一次性'">
                                     </span>
                                 </div>
                             </td>
@@ -118,18 +123,47 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 <template x-if="task.execution_type === 'manual' && task.status === 'pending'">
-                                    <button @click="completeTask(task.id)" class="text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-3 py-1 rounded border border-indigo-200 shadow-sm hover:bg-indigo-100">
-                                        确认完成
+                                    <button @click.stop="completeTask(task.id)" class="text-yellow-700 hover:text-yellow-800 bg-yellow-50 px-3 py-1 rounded border border-yellow-200 shadow-sm hover:bg-yellow-100">
+                                        ✅ 确认完成
                                     </button>
                                 </template>
                                 <template x-if="task.execution_type === 'auto' && task.status === 'pending'">
-                                    <button @click="runTaskNow(task.fb_account_id)" class="text-gray-400 hover:text-gray-600" title="立即触发账号任务">
+                                    <button @click.stop="runTaskNow(task.fb_account_id)" class="text-gray-400 hover:text-gray-600" title="立即触发账号任务">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                                         </svg>
                                     </button>
                                 </template>
+                            </td>
+                        </tr>
+                        <tr x-show="expandedTaskId === task.id" class="bg-gray-50">
+                            <td colspan="8" class="px-6 py-4">
+                                <div class="space-y-3">
+                                    <div class="text-sm font-semibold text-gray-700">任务执行日志</div>
+                                    <div x-show="loadingLogs[task.id]" class="text-sm text-gray-500">加载中...</div>
+                                    <div x-show="!loadingLogs[task.id] && (!taskLogs[task.id] || taskLogs[task.id].length === 0)" class="text-sm text-gray-500">暂无日志</div>
+                                    <div class="space-y-2">
+                                        <template x-for="log in (taskLogs[task.id] || [])" :key="log.id">
+                                            <div class="flex items-start gap-3 text-sm">
+                                                <div class="w-36 text-gray-500" x-text="formatDate(log.created_at)"></div>
+                                                <div class="w-40 text-gray-700" x-text="log.action_type"></div>
+                                                <div class="w-20">
+                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                                          :class="{
+                                                              'bg-blue-100 text-blue-800': log.level === 'INFO',
+                                                              'bg-yellow-100 text-yellow-800': log.level === 'WARN',
+                                                              'bg-red-100 text-red-800': log.level === 'ERROR',
+                                                              'bg-red-600 text-white': log.level === 'CRITICAL'
+                                                          }"
+                                                          x-text="log.level">
+                                                    </span>
+                                                </div>
+                                                <div class="flex-1 text-gray-800 break-all" x-text="log.message"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     </template>
@@ -154,6 +188,9 @@
                 accountId: '',
                 status: ''
             },
+            expandedTaskId: null,
+            taskLogs: {},
+            loadingLogs: {},
             
             init() {
                 this.loadSchedulerStatus();
@@ -197,9 +234,8 @@
             },
             
             getSchedulerStatusText() {
-                if (this.schedulerStatus.paused) return '已暂停';
-                if (this.schedulerStatus.running) return '运行中';
-                return '已停止';
+                if (this.schedulerStatus.running && !this.schedulerStatus.paused) return '🟢 运行中';
+                return '🔴 已暂停';
             },
             
             async toggleScheduler() {
@@ -241,6 +277,75 @@
                 } catch (e) {
                     console.error('Failed to run tasks', e);
                 }
+            },
+
+            toggleLogs(task) {
+                if (this.expandedTaskId === task.id) {
+                    this.expandedTaskId = null;
+                    return;
+                }
+                this.expandedTaskId = task.id;
+                if (!this.taskLogs[task.id]) {
+                    this.fetchTaskLogs(task.id);
+                }
+            },
+
+            async fetchTaskLogs(taskId) {
+                this.loadingLogs = { ...this.loadingLogs, [taskId]: true };
+                try {
+                    const params = new URLSearchParams({ task_id: taskId, page: 1, size: 50 });
+                    const res = await fetch(`/api/logs?${params.toString()}`);
+                    if (res.ok) {
+                        this.taskLogs = { ...this.taskLogs, [taskId]: await res.json() };
+                    }
+                } catch (e) {
+                    console.error('Failed to load task logs', e);
+                } finally {
+                    this.loadingLogs = { ...this.loadingLogs, [taskId]: false };
+                }
+            },
+
+            getManualTimeoutHours(task) {
+                if (!task || !task.created_at) return 0;
+                const createdAt = new Date(task.created_at);
+                return (Date.now() - createdAt.getTime()) / 3600000;
+            },
+
+            getManualTimeoutLevel(task) {
+                if (!task || task.execution_type !== 'manual' || task.status !== 'pending') return '';
+                const hoursElapsed = this.getManualTimeoutHours(task);
+                if (hoursElapsed >= 72) return 'block';
+                if (hoursElapsed >= 48) return 'alert';
+                if (hoursElapsed >= 24) return 'warn';
+                return '';
+            },
+
+            getManualTimeoutLabel(task) {
+                const level = this.getManualTimeoutLevel(task);
+                if (!level) return '';
+                const hoursElapsed = this.getManualTimeoutHours(task);
+                const days = Math.max(1, Math.floor(hoursElapsed / 24));
+                if (level === 'block') return `🚨 已超时 ${days} 天，后续任务已暂停`;
+                return `⏰ 已超时 ${days} 天`;
+            },
+
+            getManualTimeoutTextClass(task) {
+                const level = this.getManualTimeoutLevel(task);
+                if (level === 'block') return 'text-red-700';
+                if (level === 'alert') return 'text-red-600';
+                if (level === 'warn') return 'text-orange-600';
+                return 'text-gray-500';
+            },
+
+            getTaskRowClass(task) {
+                if (task.execution_type === 'manual' && task.status === 'pending') {
+                    const level = this.getManualTimeoutLevel(task);
+                    if (level === 'block') return 'bg-red-100 animate-pulse';
+                    if (level === 'alert') return 'bg-yellow-50 ring-1 ring-red-500';
+                    if (level === 'warn') return 'bg-orange-50';
+                    return 'bg-yellow-50';
+                }
+                return '';
             },
             
             formatDate(dateStr) {

@@ -31,6 +31,7 @@ class FBAccount(Base):
     proxy = relationship("ProxyIP", back_populates="fb_accounts")
     nurture_tasks = relationship("NurtureTask", back_populates="fb_account")
     action_logs = relationship("ActionLog", back_populates="fb_account")
+    alerts = relationship("Alert", back_populates="fb_account")
     avatar_assets = relationship("AvatarAsset", back_populates="used_by_account")
     ad_stats = relationship("AdDailyStat", back_populates="fb_account")
 
@@ -74,21 +75,24 @@ class CommentPool(Base):
     __tablename__ = "comment_pool"
 
     id = Column(Integer, primary_key=True, index=True)
-    content = Column(Text)
-    language = Column(String, default="en")
-    category = Column(String, nullable=True)
+    content = Column(Text, nullable=False)
+    language = Column(String(10), default="en")
+    category = Column(String(50), nullable=True)
     use_count = Column(Integer, default=0)
     last_used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class AvatarAsset(Base):
     """头像/封面资源模型"""
     __tablename__ = "avatar_assets"
 
     id = Column(Integer, primary_key=True, index=True)
-    file_path = Column(String)
-    type = Column(String) # avatar / cover
+    file_path = Column(String(500), nullable=False)
+    original_filename = Column(String(255), nullable=True)
+    type = Column(String(20), default="avatar")
     is_used = Column(Boolean, default=False)
     used_by_account_id = Column(Integer, ForeignKey("fb_accounts.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     # 关系定义
     used_by_account = relationship("FBAccount", back_populates="avatar_assets")

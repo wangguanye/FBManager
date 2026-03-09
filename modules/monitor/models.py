@@ -41,3 +41,17 @@ class ActionLog(Base):
     # 关系定义
     fb_account = relationship("FBAccount", back_populates="action_logs")
     task = relationship("NurtureTask", back_populates="action_logs")
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    fb_account_id = Column(Integer, ForeignKey("fb_accounts.id"), nullable=True)
+    level = Column(String(20))
+    title = Column(String(200))
+    message = Column(Text)
+    is_dismissed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    dismissed_at = Column(DateTime, nullable=True)
+
+    fb_account = relationship("FBAccount", back_populates="alerts")

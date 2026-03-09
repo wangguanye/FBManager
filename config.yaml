@@ -36,7 +36,7 @@ backup:
 
 # 养号 SOP 配置
 nurture_sop:
-  max_days: 10
+  max_days: 15
   days:
     1:
       online_minutes: 10
@@ -57,11 +57,103 @@ nurture_sop:
       daily_tasks:
         - { action: "scroll_feed", execution_type: "auto" }
         - { action: "watch_video", execution_type: "auto" }
-    # Default template for days > max_days
-    default:
+    8:
       online_minutes: 30
-      once_tasks: []
+      once_tasks:
+        - { action: "update_profile", execution_type: "auto", params: { field: "workplace", value: "" } }
+        - { action: "post_to_timeline", execution_type: "auto", params: { content: "从语料库随机", max_per_day: 3 } }
+        - { action: "oauth_login", execution_type: "auto", params: { target_site: "pinterest" } }
       daily_tasks:
         - { action: "scroll_feed", execution_type: "auto" }
-        - { action: "watch_video", execution_type: "auto" }
-        - { action: "interact_group", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 8 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 5 } }
+        - { action: "comment_post", execution_type: "auto", params: { max_count: 2 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 8 } }
+    9:
+      online_minutes: 30
+      once_tasks:
+        - { action: "update_profile", execution_type: "manual", params: { field: "school" } }
+        - { action: "bind_bm", execution_type: "manual" }
+        - { action: "create_ad_account", execution_type: "manual" }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 8 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 5 } }
+        - { action: "comment_post", execution_type: "auto", params: { max_count: 2 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 8 } }
+    10:
+      online_minutes: 30
+      once_tasks:
+        - { action: "update_profile", execution_type: "auto", params: { field: "bio" } }
+        - { action: "oauth_login", execution_type: "auto", params: { target_site: "eventbrite" } }
+        - { action: "post_to_timeline", execution_type: "auto", params: { max_per_day: 3 } }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 10 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 5 } }
+        - { action: "comment_post", execution_type: "auto", params: { min_count: 3, max_count: 5 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 8 } }
+    11:
+      online_minutes: 30
+      once_tasks:
+        - { action: "update_profile", execution_type: "auto", params: { field: "relationship" } }
+        - { action: "update_profile", execution_type: "auto", params: { field: "website" } }
+        - { action: "post_to_timeline", execution_type: "auto", params: { target: "fanpage" } }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 10 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 5 } }
+        - { action: "comment_post", execution_type: "auto", params: { min_count: 3, max_count: 5 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 8 } }
+    12:
+      online_minutes: 30
+      once_tasks:
+        - { action: "check_domain_verified", execution_type: "manual" }
+        - { action: "check_pixel_callback", execution_type: "manual" }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 10 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 5 } }
+        - { action: "comment_post", execution_type: "auto", params: { min_count: 3, max_count: 5 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 8 } }
+    13:
+      online_minutes: 30
+      once_tasks:
+        - { action: "check_bm_limit", execution_type: "manual" }
+        - { action: "bind_payment", execution_type: "manual" }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 10 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 5 } }
+        - { action: "comment_post", execution_type: "auto", params: { min_count: 3, max_count: 5 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 8 } }
+    14:
+      online_minutes: 30
+      once_tasks:
+        - { action: "create_first_campaign", execution_type: "manual", params: { budget_usd: 2 } }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 10 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 5 } }
+        - { action: "comment_post", execution_type: "auto", params: { min_count: 3, max_count: 5 } }
+        - { action: "add_friend", execution_type: "auto", params: { min_count: 10, max_count: 20 } }
+    # Default template for days > max_days
+    default:
+      is_default: true
+      online_minutes: 30
+      once_tasks:
+        - { action: "weekly_ad_review", execution_type: "manual" }
+      daily_tasks:
+        - { action: "scroll_feed", execution_type: "auto" }
+        - { action: "like_post", execution_type: "auto", params: { max_count: 10 } }
+        - { action: "watch_reels", execution_type: "auto", params: { count: 5 } }
+        - { action: "view_stories", execution_type: "auto", params: { count: 5 } }
+        - { action: "comment_post", execution_type: "auto", params: { max_count: 5 } }
+        - { action: "add_friend", execution_type: "auto", params: { max_count: 20 } }
