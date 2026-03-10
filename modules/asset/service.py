@@ -194,6 +194,8 @@ async def bind_account_resources(db: AsyncSession, account_id: int, bind_data: F
     proxy = await db.get(ProxyIP, bind_data.proxy_id)
     if not proxy:
         raise HTTPException(status_code=404, detail="Proxy not found")
+    if proxy.status == "永久禁用":
+        raise HTTPException(status_code=400, detail="该代理已被永久禁用，不可绑定")
     if proxy.status != "空闲":
         raise HTTPException(status_code=400, detail=f"Proxy {proxy.host} is not idle")
         
@@ -201,6 +203,8 @@ async def bind_account_resources(db: AsyncSession, account_id: int, bind_data: F
     window = await db.get(BrowserWindow, bind_data.window_id)
     if not window:
         raise HTTPException(status_code=404, detail="Window not found")
+    if window.status == "永久禁用":
+        raise HTTPException(status_code=400, detail="该窗口已被永久禁用，不可绑定")
     if window.status != "空闲":
         raise HTTPException(status_code=400, detail=f"Window {window.name} is not idle")
         
@@ -286,6 +290,8 @@ async def update_proxy(db: AsyncSession, proxy_id: int, update_data: ProxyIPUpda
     if update_data.type is not None:
         proxy.type = update_data.type
     if update_data.status is not None:
+        if proxy.status == "永久禁用" and update_data.status in ["空闲", "使用中"]:
+            raise HTTPException(status_code=400, detail="永久禁用的代理不可恢复为空闲或使用中")
         proxy.status = update_data.status
         
     db.add(proxy)
@@ -379,6 +385,8 @@ async def open_browser_window(db: AsyncSession, window_id: int):
     window = await db.get(BrowserWindow, window_id)
     if not window:
         raise HTTPException(status_code=404, detail="Window not found")
+    if window.status == "永久禁用":
+        raise HTTPException(status_code=403, detail="该窗口已被永久禁用，无法打开")
         
     client = BitBrowserClient()
     try:
@@ -402,7 +410,9 @@ async def close_browser_window(db: AsyncSession, window_id: int):
     try:
         await client.close_browser(window.bit_window_id)
         previous_status = window.status
-        if previous_status == "使用中":
+        if previous_status == "永久禁用":
+            window.status = "永久禁用"
+        elif previous_status == "使用中":
             window.status = "使用中"
         elif previous_status == "运行中":
             window.status = "使用中" if window.fb_account else "空闲"

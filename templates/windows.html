@@ -34,7 +34,7 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 <template x-for="window in windows" :key="window.id">
-                    <tr>
+                    <tr :class="{'bg-red-50': window.status === '永久禁用'}">
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.id"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono" x-text="window.bit_window_id"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="window.name"></td>
@@ -48,14 +48,17 @@
                             <span x-show="!(window.fb_account && window.fb_account.proxy)">-</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <span :class="getStatusColor(window.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-opacity-10" x-text="window.status"></span>
+                            <div class="flex items-center gap-2">
+                                <span :class="getStatusColor(window.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-opacity-10" x-text="window.status"></span>
+                                <span x-show="window.status === '永久禁用'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-600 text-white">禁用</span>
+                            </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button @click="openWindow(window)" class="text-indigo-600 hover:text-indigo-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                            <button @click="openWindow(window)" class="text-indigo-600 hover:text-indigo-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id) || window.status === '永久禁用'" :title="window.status === '永久禁用' ? '已永久禁用' : ''">
                                 <span x-show="!processing.has(window.id)">打开</span>
                                 <span x-show="processing.has(window.id)">...</span>
                             </button>
-                            <button @click="closeWindow(window)" class="text-yellow-600 hover:text-yellow-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                            <button x-show="window.status !== '永久禁用'" @click="closeWindow(window)" class="text-yellow-600 hover:text-yellow-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
                                 <span x-show="!processing.has(window.id)">关闭</span>
                                 <span x-show="processing.has(window.id)">...</span>
                             </button>
