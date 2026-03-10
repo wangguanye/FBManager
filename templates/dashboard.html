@@ -2,8 +2,11 @@
 
 {% block content %}
 <div x-data="dashboard()" x-init="init()">
-    <!-- 系统操作栏 -->
-    <div class="flex justify-end mb-4">
+    <audio id="alert-sound" src="/static/audio/alert.mp3" preload="auto" class="hidden"></audio>
+    <div class="flex justify-end mb-4 space-x-2">
+        <button @click="toggleAlertSound()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-3 rounded inline-flex items-center">
+            <span x-text="soundEnabled ? '🔔 声音开启' : '🔇 静音'"></span>
+        </button>
         <button @click="backupSystem()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded inline-flex items-center">
             <svg class="fill-current w-4 h-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M13 8V2H7v6H2l8 8 8-8h-5zM0 18h20v2H0v-2z"/></svg>
             <span>💾 立即备份</span>
@@ -284,6 +287,8 @@ function dashboard() {
         queueStatus: { running: [], queued: [], max_concurrent: 0, current_concurrent: 0 },
         alertCounts: { total: 0, error: 0, critical: 0 },
         lastAlertId: null,
+        lastAlertCount: 0,
+        soundEnabled: localStorage.getItem('alertSound') !== 'muted',
         expandedAlertId: null,
         dismissedAlertIds: new Set(),
         adOverview: { today_spend: 0, week_spend: 0, month_spend: 0, avg_cpp: 0, daily_trend: [] },
@@ -452,16 +457,51 @@ function dashboard() {
         },
         checkAlertToast() {
             if (this.alerts.length === 0) return;
+            const activeAlerts = this.alerts.filter(alert => !alert.is_dismissed);
+            const currentCount = activeAlerts.length;
             const latest = this.alerts[0];
             if (!this.lastAlertId) {
                 this.lastAlertId = latest.id;
+                this.lastAlertCount = currentCount;
                 return;
             }
             if (latest.id !== this.lastAlertId) {
                 const toastType = latest.level === 'WARN' ? 'warn' : 'error';
                 showToast(`${latest.title}: ${latest.message}`, toastType);
+                if (currentCount > this.lastAlertCount && (latest.level === 'ERROR' || latest.level === 'CRITICAL')) {
+                    this.playAlertSound();
+                }
                 this.lastAlertId = latest.id;
             }
+            this.lastAlertCount = currentCount;
+        },
+        toggleAlertSound() {
+            this.soundEnabled = !this.soundEnabled;
+            localStorage.setItem('alertSound', this.soundEnabled ? 'enabled' : 'muted');
+        },
+        playAlertSound() {
+            if (!this.soundEnabled) return;
+            const alertSound = document.getElementById('alert-sound');
+            if (!alertSound) {
+                this.playBeep();
+                return;
+            }
+            const playPromise = alertSound.play();
+            if (playPromise && playPromise.catch) {
+                playPromise.catch(() => this.playBeep());
+            }
+        },
+        playBeep() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+            const oscillator = ctx.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+            oscillator.connect(ctx.destination);
+            oscillator.start();
+            oscillator.stop(ctx.currentTime + 0.3);
+            oscillator.onended = () => ctx.close();
         },
         getAlertBadgeClass(alert) {
             if (alert.level === 'CRITICAL') return 'bg-red-600 text-white';

@@ -16,6 +16,12 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 import modules.rpa.actions
 
+DEFAULT_MAX_CONCURRENT = 5
+DEFAULT_QUEUE_MAXSIZE = 200
+PRIORITY_RETRY = 0
+PRIORITY_NEW = 1
+PRIORITY_DAILY = 2
+
 class RPAExecutor:
     def __init__(self):
         self.browser_client = BitBrowserClient()
@@ -27,6 +33,12 @@ class RPAExecutor:
             RPAExecutor._semaphore = asyncio.Semaphore(max_concurrent)
             RPAExecutor._max_concurrent = max_concurrent
         self.semaphore = RPAExecutor._semaphore
+        if not hasattr(RPAExecutor, "_task_queue"):
+            RPAExecutor._task_queue = asyncio.PriorityQueue(maxsize=DEFAULT_QUEUE_MAXSIZE)
+            RPAExecutor._queue_seq = 0
+            RPAExecutor._running_count = 0
+        self.task_queue = RPAExecutor._task_queue
+        self._ensure_worker()
 
     def _load_max_concurrent(self) -> int:
         try:
@@ -53,6 +65,72 @@ class RPAExecutor:
         return int(getattr(cls, "_max_concurrent", 0) or 0)
 
     async def run_task(self, account, task, actions: List[Dict]):
+        async with self.semaphore:
+            return await self._execute_task(account, task, actions)
+
+    async def enqueue_task(self, account, task, actions: List[Dict]):
+        priority = self._compute_priority(account, task)
+        if self._get_running_count() >= self.get_max_concurrent() or self.task_queue.full():
+            logger.info(f"当前并发 {self._get_running_count()}/{self.get_max_concurrent()}，任务排队等待")
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        seq = self._next_queue_seq()
+        await self.task_queue.put((priority, seq, account, task, actions, future))
+        return await future
+
+    async def _run_worker(self):
+        while True:
+            priority, seq, account, task, actions, future = await self.task_queue.get()
+            try:
+                async with self.semaphore:
+                    self._increment_running()
+                    try:
+                        await self._execute_task(account, task, actions)
+                        if not future.done():
+                            future.set_result(True)
+                    except Exception as e:
+                        if not future.done():
+                            future.set_exception(e)
+                    finally:
+                        self._decrement_running()
+            finally:
+                self.task_queue.task_done()
+
+    def _ensure_worker(self):
+        worker = getattr(RPAExecutor, "_worker_task", None)
+        if worker and not worker.done():
+            return
+        loop = asyncio.get_running_loop()
+        RPAExecutor._worker_task = loop.create_task(self._run_worker())
+
+    def _next_queue_seq(self) -> int:
+        seq = int(getattr(RPAExecutor, "_queue_seq", 0))
+        seq += 1
+        RPAExecutor._queue_seq = seq
+        return seq
+
+    def _get_running_count(self) -> int:
+        return int(getattr(RPAExecutor, "_running_count", 0))
+
+    def _increment_running(self) -> int:
+        value = self._get_running_count() + 1
+        RPAExecutor._running_count = value
+        return value
+
+    def _decrement_running(self) -> int:
+        value = max(0, self._get_running_count() - 1)
+        RPAExecutor._running_count = value
+        return value
+
+    def _compute_priority(self, account, task) -> int:
+        if task and getattr(task, "retry_count", 0) > 0:
+            return PRIORITY_RETRY
+        nurture_day = getattr(account, "nurture_day", 0) or 0
+        if nurture_day <= 7:
+            return PRIORITY_NEW
+        return PRIORITY_DAILY
+
+    async def _execute_task(self, account, task, actions: List[Dict]):
         """
         Execute a list of actions for an account.
         :param account: FBAccount object
@@ -84,114 +162,113 @@ class RPAExecutor:
             await self._handle_precheck_failure(account, task, "missing_bit_window_id", "ERROR")
             return
 
-        async with self.semaphore:
-            logger.info(f"Starting RPA task for account {account.username} (Window {window_id})")
+        logger.info(f"Starting RPA task for account {account.username} (Window {window_id})")
 
-            playwright = None
-            browser = None
-            overall_success = True
-            failure_message = ""
+        playwright = None
+        browser = None
+        overall_success = True
+        failure_message = ""
 
-            try:
-                res = await self.browser_client.open_browser(window_id)
-                ws_endpoint = res.get("ws")
-                if not ws_endpoint:
-                    await self._handle_task_failure(account, task, "missing_ws_endpoint")
-                    return
+        try:
+            res = await self.browser_client.open_browser(window_id)
+            ws_endpoint = res.get("ws")
+            if not ws_endpoint:
+                await self._handle_task_failure(account, task, "missing_ws_endpoint")
+                return
 
-                playwright = await async_playwright().start()
-                browser = await playwright.chromium.connect_over_cdp(ws_endpoint)
+            playwright = await async_playwright().start()
+            browser = await playwright.chromium.connect_over_cdp(ws_endpoint)
 
-                if browser.contexts:
-                    context = browser.contexts[0]
-                else:
-                    context = await browser.new_context()
-
-                if context.pages:
-                    page = context.pages[0]
-                else:
-                    page = await context.new_page()
-
-                stop_remaining_tasks = False
-                for action_config in actions:
-                    action_id = action_config.get("action")
-                    params = action_config.get("params", {})
-                    params = {**params, "account_id": account.id}
-
-                    action_cls = ACTION_REGISTRY.get(action_id)
-                    if not action_cls:
-                        await self._write_action_log(account.id, task.id if task else None, action_id, "WARN", "action_not_found")
-                        overall_success = False
-                        failure_message = "action_not_found"
-                        continue
-
-                    action_instance = action_cls()
-                    logger.info(f"Executing action: {action_id}")
-
-                    action_failed = False
-                    action_message = ""
-                    exception_raised = False
-
-                    try:
-                        result = await action_instance.execute(page, params, logger)
-                        action_success = result.get("success", False)
-                        action_message = result.get("message", "")
-                        action_failed = not action_success
-                        if action_id == "rpa.check_status":
-                            check_data = result.get("data", {})
-                            check_status = check_data.get("status")
-                            if check_status:
-                                action_message = check_status
-                            if check_status == "disabled":
-                                logger.critical(f"Account {account.id} is DISABLED!")
-                            elif check_status in ["verification_required", "suspicious"]:
-                                logger.warning(f"Account {account.id} requires verification.")
-                            await self._handle_check_status_post(account.id, check_status)
-
-                    except Exception as e:
-                        exception_raised = True
-                        action_failed = True
-                        action_message = str(e)
-                        logger.error(f"Action {action_id} failed with exception: {e}")
-
-                    log_level = "INFO"
-                    if action_failed:
-                        log_level = "ERROR" if exception_raised else "WARN"
-
-                    await self._write_action_log(
-                        account.id,
-                        task.id if task else None,
-                        action_id,
-                        log_level,
-                        action_message or "action_completed"
-                    )
-
-                    if action_failed:
-                        overall_success = False
-                        failure_message = action_message or "action_failed"
-                        if await self._apply_account_failure_circuit(account.id):
-                            stop_remaining_tasks = True
-                        await self._apply_proxy_failure_circuit(account.proxy_id)
-
-                    if stop_remaining_tasks:
-                        break
-
-            except Exception as e:
-                overall_success = False
-                failure_message = str(e)
-                logger.error(f"RPA Execution failed: {e}")
-            finally:
-                if browser:
-                    await browser.close()
-                if playwright:
-                    await playwright.stop()
-                if window_id:
-                    await self.browser_client.close_browser(window_id)
-
-            if overall_success and not stop_remaining_tasks:
-                await self._handle_task_success(account, task, "task_completed")
+            if browser.contexts:
+                context = browser.contexts[0]
             else:
-                await self._handle_task_failure(account, task, failure_message or "task_failed")
+                context = await browser.new_context()
+
+            if context.pages:
+                page = context.pages[0]
+            else:
+                page = await context.new_page()
+
+            stop_remaining_tasks = False
+            for action_config in actions:
+                action_id = action_config.get("action")
+                params = action_config.get("params", {})
+                params = {**params, "account_id": account.id}
+
+                action_cls = ACTION_REGISTRY.get(action_id)
+                if not action_cls:
+                    await self._write_action_log(account.id, task.id if task else None, action_id, "WARN", "action_not_found")
+                    overall_success = False
+                    failure_message = "action_not_found"
+                    continue
+
+                action_instance = action_cls()
+                logger.info(f"Executing action: {action_id}")
+
+                action_failed = False
+                action_message = ""
+                exception_raised = False
+
+                try:
+                    result = await action_instance.execute(page, params, logger)
+                    action_success = result.get("success", False)
+                    action_message = result.get("message", "")
+                    action_failed = not action_success
+                    if action_id == "rpa.check_status":
+                        check_data = result.get("data", {})
+                        check_status = check_data.get("status")
+                        if check_status:
+                            action_message = check_status
+                        if check_status == "disabled":
+                            logger.critical(f"Account {account.id} is DISABLED!")
+                        elif check_status in ["verification_required", "suspicious"]:
+                            logger.warning(f"Account {account.id} requires verification.")
+                        await self._handle_check_status_post(account.id, check_status)
+
+                except Exception as e:
+                    exception_raised = True
+                    action_failed = True
+                    action_message = str(e)
+                    logger.error(f"Action {action_id} failed with exception: {e}")
+
+                log_level = "INFO"
+                if action_failed:
+                    log_level = "ERROR" if exception_raised else "WARN"
+
+                await self._write_action_log(
+                    account.id,
+                    task.id if task else None,
+                    action_id,
+                    log_level,
+                    action_message or "action_completed"
+                )
+
+                if action_failed:
+                    overall_success = False
+                    failure_message = action_message or "action_failed"
+                    if await self._apply_account_failure_circuit(account.id):
+                        stop_remaining_tasks = True
+                    await self._apply_proxy_failure_circuit(account.proxy_id)
+
+                if stop_remaining_tasks:
+                    break
+
+        except Exception as e:
+            overall_success = False
+            failure_message = str(e)
+            logger.error(f"RPA Execution failed: {e}")
+        finally:
+            if browser:
+                await browser.close()
+            if playwright:
+                await playwright.stop()
+            if window_id:
+                await self.browser_client.close_browser(window_id)
+
+        if overall_success and not stop_remaining_tasks:
+            await self._handle_task_success(account, task, "task_completed")
+        else:
+            await self._handle_task_failure(account, task, failure_message or "task_failed")
 
     async def _handle_precheck_failure(self, account, task, message: str, level: str) -> None:
         await self._write_action_log(account.id, task.id if task else None, task.action if task else "precheck", level, message)

@@ -98,7 +98,7 @@ async def tasks_page(request: Request):
 @app.get("/ads")
 async def ads_page(request: Request):
     """广告投放页面"""
-    return templates.TemplateResponse("base.html", {"request": request, "title": "广告投放"})
+    return templates.TemplateResponse("ads.html", {"request": request, "title": "广告投放"})
 
 @app.get("/logs")
 async def logs_page(request: Request):

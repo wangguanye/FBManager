@@ -315,7 +315,7 @@ async def execute_account_tasks(account_id: int):
             actions = [{"action": action_name, "params": {}}]
             
             try:
-                await executor.run_task(account, task, actions)
+                await executor.enqueue_task(account, task, actions)
             except Exception as e:
                 logger.error(f"Task {task.id} execution failed: {e}")
                 task.status = "failed"
