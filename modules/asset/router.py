@@ -26,6 +26,28 @@ async def batch_import_accounts(import_data: schemas.FBAccountBatchImport, db: A
     """批量导入账号"""
     return await service.batch_import_accounts(db, import_data.raw_text)
 
+@router.post("/accounts/import/csv")
+async def preview_accounts_csv(file: UploadFile = File(...)):
+    content = (await file.read()).decode("utf-8", errors="ignore")
+    result = await service.preview_accounts_csv(content)
+    return {"code": 0, "data": result, "msg": ""}
+
+@router.post("/accounts/import/csv/confirm")
+async def confirm_accounts_csv(payload: schemas.AccountCsvImportConfirm, db: AsyncSession = Depends(get_db)):
+    rows = [row.model_dump() for row in payload.rows]
+    options = payload.options.model_dump()
+    result = await service.confirm_accounts_csv_import(db, rows, options)
+    return {"code": 0, "data": result, "msg": ""}
+
+@router.get("/accounts/import/template")
+async def download_accounts_template():
+    content = service.build_accounts_csv_template()
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="accounts_template.csv"'}
+    )
+
 @router.get("/accounts", response_model=List[schemas.FBAccount])
 async def list_accounts(
     skip: int = 0, 
@@ -134,6 +156,28 @@ async def create_proxy(proxy: schemas.ProxyIPCreate, db: AsyncSession = Depends(
 async def batch_import_proxies(import_data: schemas.ProxyIPBatchImport, db: AsyncSession = Depends(get_db)):
     """批量导入代理 IP"""
     return await service.batch_import_proxies(db, import_data.raw_text)
+
+@router.post("/proxies/import/csv", tags=["Proxies"])
+async def preview_proxies_csv(file: UploadFile = File(...)):
+    content = (await file.read()).decode("utf-8", errors="ignore")
+    result = await service.preview_proxies_csv(content)
+    return {"code": 0, "data": result, "msg": ""}
+
+@router.post("/proxies/import/csv/confirm", tags=["Proxies"])
+async def confirm_proxies_csv(payload: schemas.ProxyCsvImportConfirm, db: AsyncSession = Depends(get_db)):
+    rows = [row.model_dump() for row in payload.rows]
+    options = payload.options.model_dump()
+    result = await service.confirm_proxies_csv_import(db, rows, options)
+    return {"code": 0, "data": result, "msg": ""}
+
+@router.get("/proxies/import/template", tags=["Proxies"])
+async def download_proxies_template():
+    content = service.build_proxies_csv_template()
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="proxies_template.csv"'}
+    )
 
 @router.get("/proxies", response_model=List[schemas.ProxyIP], tags=["Proxies"])
 async def list_proxies(

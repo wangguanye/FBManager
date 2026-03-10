@@ -5,6 +5,15 @@ import asyncio
 import random
 from modules.rpa.base import BaseAction, register_action
 
+META = {
+    "action_id": "add_friend",
+    "name": "添加好友",
+    "params_schema": {
+        "max_count": {"type": "number", "label": "最大数量", "default": 3},
+        "target_region": {"type": "string", "label": "目标地区", "default": "US"}
+    }
+}
+
 @register_action
 class AddFriendAction(BaseAction):
     action_id = "rpa.add_friend"

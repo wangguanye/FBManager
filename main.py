@@ -13,11 +13,14 @@ from modules.ad.router import router as ad_router
 from modules.monitor.router import router as monitor_router
 from modules.nurture.router import router as nurture_router
 from modules.system.router import router as system_router
+from modules.health.router import router as health_router
+from modules.sop.router import router as sop_router
 from modules.system.service import perform_backup, perform_log_cleanup
 from core.scheduler import start_scheduler, stop_scheduler
 from modules.asset.models import FBAccount, ProxyIP, BrowserWindow, CommentPool, AvatarAsset
 from modules.ad.models import BMAccount, AdAccount, Fanpage, BudgetChange, AdDailyStat
 from modules.monitor.models import NurtureTask, ActionLog, Alert
+from modules.health.models import HealthScore
 
 # 加载业务配置
 with open("config.yaml", "r", encoding="utf-8") as f:
@@ -58,7 +61,7 @@ app = FastAPI(
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+app.mount("/static-assets", StaticFiles(directory="assets"), name="assets")
 
 # 配置 Jinja2 模板
 templates = Jinja2Templates(directory="templates")
@@ -69,6 +72,8 @@ app.include_router(ad_router, prefix="/api")
 app.include_router(monitor_router, prefix="/api")
 app.include_router(nurture_router, prefix="/api")
 app.include_router(system_router, prefix="/api")
+app.include_router(health_router, prefix="/api")
+app.include_router(sop_router)
 
 @app.get("/")
 async def index(request: Request):
@@ -93,17 +98,22 @@ async def windows_page(request: Request):
 @app.get("/tasks")
 async def tasks_page(request: Request):
     """任务管理页面"""
-    return templates.TemplateResponse("tasks.html", {"request": request, "title": "任务管理"})
+    return templates.TemplateResponse("tasks.html", {"request": request, "title": "养号任务"})
 
 @app.get("/ads")
 async def ads_page(request: Request):
     """广告投放页面"""
-    return templates.TemplateResponse("ads.html", {"request": request, "title": "广告投放"})
+    return templates.TemplateResponse("ads.html", {"request": request, "title": "广告账户"})
 
 @app.get("/logs")
 async def logs_page(request: Request):
     """日志页面"""
-    return templates.TemplateResponse("logs.html", {"request": request, "title": "操作日志"})
+    return templates.TemplateResponse("logs.html", {"request": request, "title": "日志查看"})
+
+@app.get("/sop")
+async def sop_page(request: Request):
+    """SOP 编辑器页面"""
+    return templates.TemplateResponse("sop.html", {"request": request, "title": "SOP 编辑器"})
 
 @app.get("/nurture")
 async def nurture_page(request: Request):
@@ -118,7 +128,7 @@ async def rpa_page(request: Request):
 @app.get("/assets")
 async def assets_page(request: Request):
     """资源管理页面"""
-    return templates.TemplateResponse("assets.html", {"request": request, "title": "语料 & 素材"})
+    return templates.TemplateResponse("assets.html", {"request": request, "title": "语料&素材"})
 
 if __name__ == "__main__":
     # 仅监听 127.0.0.1:8000

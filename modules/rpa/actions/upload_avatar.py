@@ -10,6 +10,20 @@ from db.database import AsyncSessionLocal
 from modules.asset.service import pick_avatar
 from modules.asset.models import AvatarAsset
 
+META = {
+    "action_id": "upload_avatar",
+    "name": "上传头像或封面",
+    "params_schema": {
+        "type": {
+            "type": "select",
+            "label": "上传类型",
+            "options": ["avatar", "cover", "both"],
+            "default": "both"
+        },
+        "account_id": {"type": "number", "label": "账号ID", "default": 0}
+    }
+}
+
 @register_action
 class UploadAvatarAction(BaseAction):
     action_id = "rpa.upload_avatar"

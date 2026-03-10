@@ -14,6 +14,10 @@ router = APIRouter(tags=["Nurture Tasks"])
 class MaxConcurrentPayload(BaseModel):
     value: int
 
+class RunActionPayload(BaseModel):
+    action: str
+    params: dict | None = None
+
 @router.get("/tasks/today", response_model=List[schemas.NurtureTask])
 async def get_today_tasks(
     date: date = Query(default_factory=lambda: datetime.now().date()),
@@ -48,6 +52,16 @@ async def run_account_tasks(
     # 我们直接 await 吧，反正模拟只有 2s
     await service.execute_account_tasks(account_id)
     return {"message": "Execution started"}
+
+@router.post("/tasks/{account_id}/run-action")
+async def run_action(account_id: int, payload: RunActionPayload):
+    if not payload.action:
+        return {"code": 1, "data": {}, "msg": "missing_action"}
+    try:
+        task_id = await service.execute_custom_action(account_id, payload.action, payload.params)
+    except ValueError as e:
+        return {"code": 1, "data": {}, "msg": str(e)}
+    return {"code": 0, "data": {"task_id": task_id}, "msg": ""}
 
 @router.post("/tasks/{task_id}/complete")
 async def complete_task(

@@ -18,6 +18,14 @@ rpa:
   page_load_timeout: 30      # 页面加载超时（秒）
   proxy_timeout: 30          # 代理连接超时（秒）
 
+budget_engine:
+  auto_enabled: false
+  min_stable_days: 3
+  min_roas: 1.0
+  min_ctr: 0.005
+  tiers: [2, 5, 10, 25, 50, 100]
+  check_time: "10:00"
+
 # 手动任务超时提醒
 manual_task_timeout:
   warn_hours: 24             # 警告超时（小时）

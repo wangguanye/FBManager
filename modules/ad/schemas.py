@@ -146,3 +146,11 @@ class BudgetChangeOut(BaseModel):
     changed_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class BudgetEngineConfigIn(BaseModel):
+    auto_enabled: Optional[bool] = None
+    tiers: Optional[list[float]] = None
+    min_stable_days: Optional[int] = None
+    min_roas: Optional[float] = None
+    min_ctr: Optional[float] = None
+    check_time: Optional[str] = None

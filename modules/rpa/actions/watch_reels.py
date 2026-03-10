@@ -2,6 +2,15 @@ from modules.rpa.base import BaseAction, register_action
 import random
 import asyncio
 
+META = {
+    "action_id": "watch_reels",
+    "name": "观看 Reels",
+    "params_schema": {
+        "count": {"type": "number", "label": "观看数量", "default": 5},
+        "min_watch_seconds": {"type": "number", "label": "最少观看秒数", "default": 10}
+    }
+}
+
 @register_action
 class WatchReelsAction(BaseAction):
     action_id = "rpa.watch_reels"

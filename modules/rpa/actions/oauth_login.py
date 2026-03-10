@@ -6,6 +6,19 @@ import random
 
 from modules.rpa.base import BaseAction, register_action
 
+META = {
+    "action_id": "oauth_login",
+    "name": "第三方 OAuth 登录",
+    "params_schema": {
+        "target_site": {
+            "type": "select",
+            "label": "目标站点",
+            "options": ["canva", "spotify", "pinterest", "eventbrite", "change_org"],
+            "default": "spotify"
+        }
+    }
+}
+
 @register_action
 class OAuthLoginAction(BaseAction):
     action_id = "rpa.oauth_login"

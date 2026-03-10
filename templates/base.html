@@ -28,57 +28,57 @@
             <nav class="flex-grow mt-4">
                 <ul class="space-y-2 px-2">
                     <li>
-                        <a href="/" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
-                            <span class="inline-flex justify-center items-center h-6 w-6">🏠</span>
-                            <span x-show="sidebarOpen" class="ml-3">仪表盘</span>
+                        <a href="/" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/' else '' }}">
+                            <span class="inline-flex justify-center items-center h-6 w-6">📊</span>
+                            <span x-show="sidebarOpen" class="ml-3">Dashboard</span>
                         </a>
                     </li>
                     <li>
-                        <a href="/accounts" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
+                        <a href="/accounts" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/accounts' else '' }}">
                             <span class="inline-flex justify-center items-center h-6 w-6">👤</span>
                             <span x-show="sidebarOpen" class="ml-3">账号管理</span>
                         </a>
                     </li>
                     <li>
-                        <a href="/nurture" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
-                            <span class="inline-flex justify-center items-center h-6 w-6">🌱</span>
-                            <span x-show="sidebarOpen" class="ml-3">养号流程</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/proxies" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
+                        <a href="/proxies" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/proxies' else '' }}">
                             <span class="inline-flex justify-center items-center h-6 w-6">🌐</span>
                             <span x-show="sidebarOpen" class="ml-3">代理管理</span>
                         </a>
                     </li>
                     <li>
-                        <a href="/windows" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
-                            <span class="inline-flex justify-center items-center h-6 w-6">🖥️</span>
+                        <a href="/windows" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/windows' else '' }}">
+                            <span class="inline-flex justify-center items-center h-6 w-6">🪟</span>
                             <span x-show="sidebarOpen" class="ml-3">窗口管理</span>
                         </a>
                     </li>
                     <li>
-                        <a href="/rpa" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
-                            <span class="inline-flex justify-center items-center h-6 w-6">🤖</span>
-                            <span x-show="sidebarOpen" class="ml-3">RPA 脚本</span>
+                        <a href="/tasks" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/tasks' else '' }}">
+                            <span class="inline-flex justify-center items-center h-6 w-6">📅</span>
+                            <span x-show="sidebarOpen" class="ml-3">养号任务</span>
                         </a>
                     </li>
                     <li>
-                        <a href="/ads" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
+                        <a href="/ads" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/ads' else '' }}">
                             <span class="inline-flex justify-center items-center h-6 w-6">📢</span>
-                            <span x-show="sidebarOpen" class="ml-3">广告投放</span>
+                            <span x-show="sidebarOpen" class="ml-3">广告账户</span>
                         </a>
                     </li>
                     <li>
-                        <a href="/assets" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
-                            <span class="inline-flex justify-center items-center h-6 w-6">🧰</span>
-                            <span x-show="sidebarOpen" class="ml-3">语料 & 素材</span>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="/logs" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors">
+                        <a href="/sop" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/sop' else '' }}">
                             <span class="inline-flex justify-center items-center h-6 w-6">📋</span>
-                            <span x-show="sidebarOpen" class="ml-3">操作日志</span>
+                            <span x-show="sidebarOpen" class="ml-3">SOP 编辑器</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/assets" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/assets' else '' }}">
+                            <span class="inline-flex justify-center items-center h-6 w-6">📦</span>
+                            <span x-show="sidebarOpen" class="ml-3">语料&素材</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/logs" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/logs' else '' }}">
+                            <span class="inline-flex justify-center items-center h-6 w-6">📝</span>
+                            <span x-show="sidebarOpen" class="ml-3">日志查看</span>
                         </a>
                     </li>
                 </ul>
@@ -155,6 +155,7 @@
              class="px-4 py-2 rounded-lg shadow-lg text-sm text-white"
              :class="{
                 'bg-blue-500': $store.toast.type === 'info',
+                'bg-green-500': $store.toast.type === 'success',
                 'bg-yellow-500': $store.toast.type === 'warn',
                 'bg-red-500': $store.toast.type === 'error'
              }"

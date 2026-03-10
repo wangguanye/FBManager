@@ -10,6 +10,15 @@ from db.database import AsyncSessionLocal
 from modules.asset.models import FBAccount
 from core.crypto import encrypt_value
 
+META = {
+    "action_id": "enable_2fa",
+    "name": "开启双重验证",
+    "params_schema": {
+        "method": {"type": "select", "label": "验证方式", "options": ["totp"], "default": "totp"},
+        "account_id": {"type": "number", "label": "账号ID", "default": 0}
+    }
+}
+
 @register_action
 class Enable2FAAction(BaseAction):
     action_id = "rpa.enable_2fa"

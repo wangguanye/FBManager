@@ -128,6 +128,34 @@
             </div>
         </div>
 
+        <div class="bg-white p-4 rounded-lg shadow-sm">
+            <div class="flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-gray-900">投放操作</h3>
+            </div>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">执行账号</label>
+                    <select x-model="selectedActionAccountId" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        <option value="">请选择</option>
+                        <template x-for="account in fbAccounts" :key="account.id">
+                            <option :value="account.id" x-text="account.username"></option>
+                        </template>
+                    </select>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                    <button @click="openCreateCampaignModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2">
+                        🚀 创建广告系列
+                    </button>
+                    <button @click="openAdjustBudgetModal()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                        💰 调整预算
+                    </button>
+                </div>
+                <div class="text-xs text-gray-500">
+                    通过 RPA 自动执行 Ads Manager 操作
+                </div>
+            </div>
+        </div>
+
         <div class="bg-white rounded-lg shadow overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
@@ -447,6 +475,95 @@
         </div>
     </div>
 
+    <div x-show="showCreateCampaignModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeCreateCampaignModal()"></div>
+            <div class="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">创建广告系列</h3>
+                <form @submit.prevent="submitCreateCampaign">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">广告系列名称</label>
+                            <input type="text" x-model="createCampaignForm.campaign_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">投放目标</label>
+                                <select x-model="createCampaignForm.objective" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                    <option value="messages">messages</option>
+                                    <option value="traffic">traffic</option>
+                                    <option value="engagement">engagement</option>
+                                    <option value="leads">leads</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">日预算(USD)</label>
+                                <input type="number" x-model="createCampaignForm.daily_budget" min="0" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">目标国家</label>
+                                <input type="text" x-model="createCampaignForm.target_country" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">最小年龄</label>
+                                <input type="number" x-model="createCampaignForm.target_age_min" min="13" step="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">最大年龄</label>
+                                <input type="number" x-model="createCampaignForm.target_age_max" min="13" step="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">性别</label>
+                                <select x-model="createCampaignForm.target_gender" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                    <option value="all">all</option>
+                                    <option value="female">female</option>
+                                    <option value="male">male</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">兴趣关键词(逗号分隔)</label>
+                                <input type="text" x-model="createCampaignForm.interests" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button type="button" @click="closeCreateCampaignModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">提交</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showAdjustBudgetModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeAdjustBudgetModal()"></div>
+            <div class="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">调整预算</h3>
+                <form @submit.prevent="submitAdjustBudget">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">广告系列名称</label>
+                            <input type="text" x-model="adjustBudgetForm.campaign_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">新日预算(USD)</label>
+                            <input type="number" x-model="adjustBudgetForm.new_budget" min="0" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button type="button" @click="closeAdjustBudgetModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">提交</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div x-show="showDetailPanel" x-cloak class="fixed inset-0 z-40">
         <div class="absolute inset-0 bg-gray-900 bg-opacity-30" @click="closeAdDetail()"></div>
         <div class="absolute top-0 right-0 w-full max-w-xl h-full bg-white shadow-xl overflow-y-auto">
@@ -489,6 +606,25 @@
                         <div x-show="adDetail.budget_changes?.length === 0" class="text-sm text-gray-500">暂无预算递增记录</div>
                     </div>
                 </div>
+                <div class="bg-white rounded-lg border border-gray-200 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-semibold text-gray-900">预算递增</h4>
+                        <span class="text-xs text-gray-500" x-text="budgetUpgradeInfo ? (budgetUpgradeInfo.eligible ? '可递增' : '不可递增') : '未检查'"></span>
+                    </div>
+                    <div class="space-y-2 text-sm text-gray-700">
+                        <div>当前预算：<span class="font-medium" x-text="budgetUpgradeInfo?.current_budget != null ? formatUsd(budgetUpgradeInfo.current_budget) : formatCurrency(adDetail.account?.daily_budget || 0)"></span></div>
+                        <div>下一档预算：<span class="font-medium" x-text="budgetUpgradeInfo?.next_budget ? formatUsd(budgetUpgradeInfo.next_budget) : '-'"></span></div>
+                        <div>递增依据：<span class="font-medium" x-text="budgetUpgradeInfo?.reason || '-'"></span></div>
+                        <div class="grid grid-cols-2 gap-2 text-xs text-gray-500">
+                            <div>ROAS 均值：<span x-text="budgetUpgradeInfo?.metrics?.average_roas != null ? Number(budgetUpgradeInfo.metrics.average_roas).toFixed(2) : '-'"></span></div>
+                            <div>CTR 均值：<span x-text="budgetUpgradeInfo?.metrics?.average_ctr != null ? `${Number(budgetUpgradeInfo.metrics.average_ctr).toFixed(2)}%` : '-'"></span></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex gap-3">
+                        <button type="button" @click="checkBudgetUpgrade" :disabled="budgetUpgradeLoading || !adDetail.account" class="px-4 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 disabled:opacity-60">📈 检查递增</button>
+                        <button type="button" @click="executeBudgetUpgrade" :disabled="budgetUpgradeLoading || !budgetUpgradeInfo?.eligible" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-60">⬆️ 执行递增</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -514,12 +650,19 @@
             showAdAccountModal: false,
             showFanpageModal: false,
             showAdStatModal: false,
+            showCreateCampaignModal: false,
+            showAdjustBudgetModal: false,
             showDetailPanel: false,
+            selectedActionAccountId: '',
             bmForm: { id: null, bm_id: '', fb_account_id: '', name: '', region: '', status: 'active' },
             adAccountForm: { id: null, ad_account_id: '', bm_id: '', name: '', spending_limit: '$100', payment_method: '', status: 'active', daily_budget: '', original_daily_budget_cents: 0, budget_reason: '' },
             fanpageForm: { id: null, page_id: '', fb_account_id: '', page_name: '', page_url: '', status: 'active', pixel_installed: false, domain_verified: false },
             adStatForm: { ad_account_id: null, ad_account_label: '', date: '', spend: '', impressions: 0, clicks: 0, conversions: 0 },
+            createCampaignForm: { campaign_name: '', objective: 'messages', daily_budget: 2, target_country: 'US', target_age_min: 25, target_age_max: 55, target_gender: 'female', interests: 'weight loss,fitness,diet' },
+            adjustBudgetForm: { campaign_name: '', new_budget: '' },
             adDetail: { account: null, bm: null, recent_stats: [], budget_changes: [] },
+            budgetUpgradeInfo: null,
+            budgetUpgradeLoading: false,
             chartInstance: null,
             constants: { centsMultiplier: 100 },
 
@@ -562,6 +705,9 @@
                     const res = await fetch('/api/accounts?limit=500')
                     if (!res.ok) throw new Error('加载账号失败')
                     this.fbAccounts = await res.json()
+                    if (!this.selectedActionAccountId && this.fbAccounts.length > 0) {
+                        this.selectedActionAccountId = this.fbAccounts[0].id
+                    }
                 } catch (e) {
                     showToast(e.message || '加载账号失败', 'error')
                 }
@@ -864,11 +1010,76 @@
                 }
             },
 
+            openCreateCampaignModal() {
+                this.createCampaignForm = { campaign_name: '', objective: 'messages', daily_budget: 2, target_country: 'US', target_age_min: 25, target_age_max: 55, target_gender: 'female', interests: 'weight loss,fitness,diet' }
+                this.showCreateCampaignModal = true
+            },
+
+            closeCreateCampaignModal() {
+                this.showCreateCampaignModal = false
+            },
+
+            async submitCreateCampaign() {
+                const payload = {
+                    campaign_name: this.createCampaignForm.campaign_name || '',
+                    objective: this.createCampaignForm.objective,
+                    daily_budget: Number(this.createCampaignForm.daily_budget || 0),
+                    target_country: this.createCampaignForm.target_country || 'US',
+                    target_age_min: Number(this.createCampaignForm.target_age_min || 0),
+                    target_age_max: Number(this.createCampaignForm.target_age_max || 0),
+                    target_gender: this.createCampaignForm.target_gender || 'female',
+                    interests: this.createCampaignForm.interests || ''
+                }
+                const ok = await this.runRpaAction('create_campaign', payload)
+                if (ok) this.showCreateCampaignModal = false
+            },
+
+            openAdjustBudgetModal() {
+                this.adjustBudgetForm = { campaign_name: '', new_budget: '' }
+                this.showAdjustBudgetModal = true
+            },
+
+            closeAdjustBudgetModal() {
+                this.showAdjustBudgetModal = false
+            },
+
+            async submitAdjustBudget() {
+                const payload = {
+                    campaign_name: this.adjustBudgetForm.campaign_name || '',
+                    new_budget: Number(this.adjustBudgetForm.new_budget || 0)
+                }
+                const ok = await this.runRpaAction('adjust_budget', payload)
+                if (ok) this.showAdjustBudgetModal = false
+            },
+
+            async runRpaAction(action, params) {
+                if (!this.selectedActionAccountId) {
+                    showToast('请选择执行账号', 'warn')
+                    return false
+                }
+                try {
+                    const res = await fetch(`/api/tasks/${this.selectedActionAccountId}/run-action`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action, params })
+                    })
+                    const payload = await res.json()
+                    if (!res.ok || payload.code !== 0) throw new Error(payload.msg || '执行失败')
+                    const taskId = payload.data?.task_id
+                    showToast(`任务已创建：${taskId}`, 'info')
+                    return true
+                } catch (e) {
+                    showToast(e.message || '执行失败', 'error')
+                    return false
+                }
+            },
+
             async openAdDetail(ad) {
                 try {
                     const res = await fetch(`/api/ad-accounts/${ad.id}/detail`)
                     if (!res.ok) throw new Error('加载详情失败')
                     this.adDetail = await res.json()
+                    this.budgetUpgradeInfo = null
                     this.showDetailPanel = true
                     this.renderChart()
                 } catch (e) {
@@ -878,9 +1089,61 @@
 
             closeAdDetail() {
                 this.showDetailPanel = false
+                this.budgetUpgradeInfo = null
                 if (this.chartInstance) {
                     this.chartInstance.destroy()
                     this.chartInstance = null
+                }
+            },
+
+            async reloadAdDetail() {
+                if (!this.adDetail.account?.id) return
+                const res = await fetch(`/api/ad-accounts/${this.adDetail.account.id}/detail`)
+                if (!res.ok) throw new Error('刷新详情失败')
+                this.adDetail = await res.json()
+                this.renderChart()
+            },
+
+            async checkBudgetUpgrade() {
+                if (!this.adDetail.account?.id) {
+                    showToast('请选择广告账户', 'warn')
+                    return
+                }
+                this.budgetUpgradeLoading = true
+                try {
+                    const res = await fetch(`/api/ad-accounts/${this.adDetail.account.id}/upgrade-check`)
+                    const payload = await res.json()
+                    if (!res.ok || payload.code !== 0) throw new Error(payload.msg || '检查失败')
+                    this.budgetUpgradeInfo = payload.data
+                    if (payload.data?.eligible) {
+                        showToast('满足递增条件', 'info')
+                    } else {
+                        showToast(payload.data?.reason || '暂不可递增', 'warn')
+                    }
+                } catch (e) {
+                    showToast(e.message || '检查失败', 'error')
+                } finally {
+                    this.budgetUpgradeLoading = false
+                }
+            },
+
+            async executeBudgetUpgrade() {
+                if (!this.adDetail.account?.id) {
+                    showToast('请选择广告账户', 'warn')
+                    return
+                }
+                this.budgetUpgradeLoading = true
+                try {
+                    const res = await fetch(`/api/ad-accounts/${this.adDetail.account.id}/upgrade`, { method: 'POST' })
+                    const payload = await res.json()
+                    if (!res.ok || payload.code !== 0) throw new Error(payload.msg || '执行失败')
+                    this.budgetUpgradeInfo = payload.data
+                    showToast(payload.data?.eligible ? '递增任务已创建' : payload.data?.reason || '递增未执行', payload.data?.eligible ? 'info' : 'warn')
+                    await this.reloadAdDetail()
+                } catch (e) {
+                    showToast(e.message || '执行失败', 'error')
+                } finally {
+                    this.budgetUpgradeLoading = false
                 }
             },
 
@@ -949,6 +1212,11 @@
             formatCurrency(cents) {
                 const value = Number(cents || 0) / this.constants.centsMultiplier
                 return `$${value.toFixed(2)}`
+            },
+
+            formatUsd(value) {
+                const number = Number(value || 0)
+                return `$${number.toFixed(2)}`
             },
 
             toCents(amount) {

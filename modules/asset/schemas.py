@@ -88,6 +88,40 @@ class FBAccountBatchImport(BaseModel):
 class ProxyIPBatchImport(BaseModel):
     raw_text: str
 
+class AccountCsvRow(BaseModel):
+    username: str
+    password: str
+    totp_secret: Optional[str] = None
+    email: str
+    email_password: str
+    cookie: Optional[str] = None
+    browser_profile_id: Optional[str] = None
+    line: Optional[int] = None
+
+class AccountCsvImportOptions(BaseModel):
+    auto_bindWindow: bool = True
+    default_region: str = "US"
+    default_timezone: str = "America/New_York"
+
+class AccountCsvImportConfirm(BaseModel):
+    rows: List[AccountCsvRow]
+    options: AccountCsvImportOptions
+
+class ProxyCsvRow(BaseModel):
+    host: str
+    port: int
+    username: Optional[str] = None
+    password: Optional[str] = None
+    line: Optional[int] = None
+
+class ProxyCsvImportOptions(BaseModel):
+    default_type: str = "socks5"
+    default_region: Optional[str] = None
+
+class ProxyCsvImportConfirm(BaseModel):
+    rows: List[ProxyCsvRow]
+    options: ProxyCsvImportOptions
+
 class FBAccountBind(BaseModel):
     proxy_id: int
     window_id: int

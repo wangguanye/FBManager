@@ -3,6 +3,8 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from db.database import AsyncSessionLocal
 from modules.nurture.service import generate_daily_tasks, check_and_execute_tasks, check_manual_task_timeout
+from modules.health.service import recalculate_all_health_scores
+from modules.ad.budget_engine import BudgetEngine, read_budget_engine_config
 from loguru import logger
 from datetime import datetime
 import yaml
@@ -32,6 +34,29 @@ async def job_check_manual_timeout():
     """
     await check_manual_task_timeout()
 
+async def job_recalculate_health_scores():
+    logger.info("Executing job: recalculate_health_scores")
+    async with AsyncSessionLocal() as db:
+        await recalculate_all_health_scores(db)
+
+async def job_auto_budget_upgrade():
+    config = read_budget_engine_config()
+    if not config.get("auto_enabled"):
+        return
+    engine = BudgetEngine()
+    await engine.check_all_accounts()
+
+def _parse_check_time(value: str) -> tuple[int, int]:
+    try:
+        parts = str(value).strip().split(":")
+        hour = int(parts[0])
+        minute = int(parts[1]) if len(parts) > 1 else 0
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return hour, minute
+    except Exception:
+        pass
+    return 10, 0
+
 async def start_scheduler():
     """
     启动调度器。
@@ -60,6 +85,22 @@ async def start_scheduler():
             job_check_manual_timeout,
             IntervalTrigger(minutes=30),
             id="check_manual_timeout",
+            replace_existing=True
+        )
+
+        scheduler.add_job(
+            job_recalculate_health_scores,
+            CronTrigger(hour=6, minute=0),
+            id="recalculate_health_scores",
+            replace_existing=True
+        )
+
+        budget_config = read_budget_engine_config()
+        budget_hour, budget_minute = _parse_check_time(budget_config.get("check_time", "10:00"))
+        scheduler.add_job(
+            job_auto_budget_upgrade,
+            CronTrigger(hour=budget_hour, minute=budget_minute),
+            id="auto_budget_upgrade",
             replace_existing=True
         )
         

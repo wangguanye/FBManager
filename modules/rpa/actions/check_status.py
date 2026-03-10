@@ -1,6 +1,12 @@
 from modules.rpa.base import BaseAction, register_action
 import asyncio
 
+META = {
+    "action_id": "check_status",
+    "name": "检查账号状态",
+    "params_schema": {}
+}
+
 @register_action
 class CheckStatusAction(BaseAction):
     action_id = "rpa.check_status"

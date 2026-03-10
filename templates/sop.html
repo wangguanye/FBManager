@@ -1,0 +1,636 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="sopEditor()" x-init="init()" class="space-y-4 pb-24">
+    <div class="flex gap-4">
+        <div class="w-[250px] space-y-3">
+            <div class="bg-white rounded-lg shadow p-3 flex items-center justify-between">
+                <div class="text-sm font-semibold text-gray-800">天数列表</div>
+                <div class="text-xs text-gray-500" x-text="`${days.length} 项`"></div>
+            </div>
+            <div class="space-y-3">
+                <template x-for="day in days" :key="day._uid">
+                    <div @click="selectDay(day._uid)"
+                         class="bg-white rounded-lg shadow p-3 relative cursor-pointer border"
+                         :class="getDayCardClass(day)">
+                        <button x-show="!day.is_default" @click.stop="removeDay(day)"
+                                class="absolute top-2 right-2 text-gray-400 hover:text-red-600">×</button>
+                        <div class="text-sm font-semibold text-gray-900" x-text="getDayTitle(day)"></div>
+                        <div class="text-xs text-gray-500 mt-1" x-text="`任务总数 ${getTaskTotal(day)}`"></div>
+                        <div class="flex flex-wrap gap-1 mt-2 text-xs">
+                            <span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700" x-text="`自动 ${getAutoCount(day)}`"></span>
+                            <span class="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700" x-text="`人工 ${getManualCount(day)}`"></span>
+                            <span class="px-2 py-0.5 rounded-full bg-green-50 text-green-700" x-text="`每日 ${getDailyCount(day)}`"></span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <button @click="addDay()"
+                    class="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm">
+                + 添加天数
+            </button>
+        </div>
+
+        <div class="flex-1">
+            <template x-if="selectedDay">
+                <div class="space-y-4">
+                    <div class="bg-white rounded-lg shadow p-4 flex flex-col gap-3">
+                        <div class="flex items-center justify-between">
+                            <div class="text-lg font-semibold text-gray-900" x-text="getDayTitle(selectedDay)"></div>
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                       x-model="selectedDay.is_default" @change="toggleDefault(selectedDay)">
+                                默认模板
+                            </label>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 text-sm">
+                            <div class="text-gray-500">在线时长</div>
+                            <input type="number" min="0"
+                                   class="w-24 px-2 py-1 border border-gray-300 rounded"
+                                   x-model.number="selectedDay.online_minutes.min" @input="markDirty()">
+                            <div class="text-gray-400">-</div>
+                            <input type="number" min="0"
+                                   class="w-24 px-2 py-1 border border-gray-300 rounded"
+                                   x-model.number="selectedDay.online_minutes.max" @input="markDirty()">
+                            <div class="text-gray-500">分钟</div>
+                        </div>
+                    </div>
+
+                    <div x-show="errorList.length > 0"
+                         class="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
+                        <div class="font-semibold mb-1">校验失败</div>
+                        <ul class="list-disc list-inside space-y-1">
+                            <template x-for="(err, idx) in errorList" :key="idx">
+                                <li x-text="err"></li>
+                            </template>
+                        </ul>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="text-sm font-semibold text-gray-900">一次性配置任务</div>
+                            <button @click="addOnceTask()"
+                                    class="px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100">
+                                + 添加任务
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-sm">
+                                <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left">行为模块</th>
+                                        <th class="px-3 py-2 text-left">类型</th>
+                                        <th class="px-3 py-2 text-left">参数</th>
+                                        <th class="px-3 py-2 text-right">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <template x-for="task in selectedDay.once_tasks" :key="task._uid">
+                                        <tr :class="getTaskRowClass(task)">
+                                            <td class="px-3 py-2">
+                                                <select class="w-full border border-gray-300 rounded px-2 py-1"
+                                                        :class="getTaskActionClass(task)"
+                                                        x-model="task.action"
+                                                        @change="handleTaskActionChange(task)">
+                                                    <option value="">请选择</option>
+                                                    <template x-for="action in actions" :key="action.action_id">
+                                                        <option :value="action.action_id" x-text="action.name"></option>
+                                                    </template>
+                                                </select>
+                                            </td>
+                                            <td class="px-3 py-2">
+                                                <select class="w-full border border-gray-300 rounded px-2 py-1"
+                                                        x-model="task.type" @change="markDirty()">
+                                                    <option value="auto">auto</option>
+                                                    <option value="manual">manual</option>
+                                                </select>
+                                            </td>
+                                            <td class="px-3 py-2">
+                                                <div x-show="hasParams(task)" class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    <template x-for="(schema, key) in getParamSchema(task)" :key="key">
+                                                        <div class="flex items-center gap-2">
+                                                            <div class="text-xs text-gray-500 w-24" x-text="schema.label || key"></div>
+                                                            <template x-if="schema.type === 'number'">
+                                                                <input type="number" class="flex-1 border border-gray-300 rounded px-2 py-1"
+                                                                       x-model.number="task.params[key]" @input="markDirty()">
+                                                            </template>
+                                                            <template x-if="schema.type === 'string'">
+                                                                <input type="text" class="flex-1 border border-gray-300 rounded px-2 py-1"
+                                                                       x-model="task.params[key]" @input="markDirty()">
+                                                            </template>
+                                                            <template x-if="schema.type === 'select'">
+                                                                <select class="flex-1 border border-gray-300 rounded px-2 py-1"
+                                                                        x-model="task.params[key]" @change="markDirty()">
+                                                                    <template x-for="option in schema.options || []" :key="option">
+                                                                        <option :value="option" x-text="option"></option>
+                                                                    </template>
+                                                                </select>
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                                <div x-show="!hasParams(task)" class="text-xs text-gray-400">无参数</div>
+                                            </td>
+                                            <td class="px-3 py-2 text-right">
+                                                <button @click="removeOnceTask(task)" class="text-red-600 hover:text-red-800">删除</button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div x-show="selectedDay.once_tasks.length === 0" class="text-xs text-gray-400">暂无任务</div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="text-sm font-semibold text-gray-900">每日行为任务</div>
+                            <button @click="addDailyTask()"
+                                    class="px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100">
+                                + 添加任务
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-sm">
+                                <thead class="text-xs text-gray-500 uppercase bg-gray-50">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left">行为模块</th>
+                                        <th class="px-3 py-2 text-left">参数</th>
+                                        <th class="px-3 py-2 text-right">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <template x-for="task in selectedDay.daily_tasks" :key="task._uid">
+                                        <tr :class="getTaskRowClass(task)">
+                                            <td class="px-3 py-2">
+                                                <select class="w-full border border-gray-300 rounded px-2 py-1"
+                                                        :class="getTaskActionClass(task)"
+                                                        x-model="task.action"
+                                                        @change="handleTaskActionChange(task, true)">
+                                                    <option value="">请选择</option>
+                                                    <template x-for="action in actions" :key="action.action_id">
+                                                        <option :value="action.action_id" x-text="action.name"></option>
+                                                    </template>
+                                                </select>
+                                            </td>
+                                            <td class="px-3 py-2">
+                                                <div x-show="hasParams(task)" class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    <template x-for="(schema, key) in getParamSchema(task)" :key="key">
+                                                        <div class="flex items-center gap-2">
+                                                            <div class="text-xs text-gray-500 w-24" x-text="schema.label || key"></div>
+                                                            <template x-if="schema.type === 'number'">
+                                                                <input type="number" class="flex-1 border border-gray-300 rounded px-2 py-1"
+                                                                       x-model.number="task.params[key]" @input="markDirty()">
+                                                            </template>
+                                                            <template x-if="schema.type === 'string'">
+                                                                <input type="text" class="flex-1 border border-gray-300 rounded px-2 py-1"
+                                                                       x-model="task.params[key]" @input="markDirty()">
+                                                            </template>
+                                                            <template x-if="schema.type === 'select'">
+                                                                <select class="flex-1 border border-gray-300 rounded px-2 py-1"
+                                                                        x-model="task.params[key]" @change="markDirty()">
+                                                                    <template x-for="option in schema.options || []" :key="option">
+                                                                        <option :value="option" x-text="option"></option>
+                                                                    </template>
+                                                                </select>
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                                <div x-show="!hasParams(task)" class="text-xs text-gray-400">无参数</div>
+                                            </td>
+                                            <td class="px-3 py-2 text-right">
+                                                <button @click="removeDailyTask(task)" class="text-red-600 hover:text-red-800">删除</button>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div x-show="selectedDay.daily_tasks.length === 0" class="text-xs text-gray-400">暂无任务</div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between">
+        <button @click="handleValidate()"
+                class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+            ✅ 校验
+        </button>
+        <button @click="handleSave()"
+                class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+            💾 保存
+        </button>
+        <button @click="openRestoreModal()"
+                class="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800">
+            ↩️ 恢复备份
+        </button>
+    </div>
+
+    <div x-show="showRestoreModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-gray-900/40" @click="showRestoreModal = false"></div>
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg relative z-10">
+            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div class="text-sm font-semibold text-gray-900">恢复备份</div>
+                <button @click="showRestoreModal = false" class="text-gray-500 hover:text-gray-800">关闭</button>
+            </div>
+            <div class="p-4 space-y-2 max-h-80 overflow-y-auto">
+                <template x-for="file in backups" :key="file">
+                    <button @click="restoreBackup(file)"
+                            class="w-full text-left px-3 py-2 border border-gray-200 rounded hover:bg-gray-50">
+                        <div class="text-sm text-gray-800" x-text="file"></div>
+                    </button>
+                </template>
+                <div x-show="backups.length === 0" class="text-sm text-gray-500 text-center py-6">暂无备份</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function sopEditor() {
+        return {
+            days: [],
+            selectedDayUid: null,
+            actions: [],
+            backups: [],
+            showRestoreModal: false,
+            errorList: [],
+            errorDayMap: {},
+            invalidActionList: [],
+            dirty: false,
+            uidSeed: 0,
+            get selectedDay() {
+                return this.days.find(day => day._uid === this.selectedDayUid) || null
+            },
+            init() {
+                this.fetchAll()
+                window.addEventListener('beforeunload', (event) => {
+                    if (!this.dirty) return
+                    event.preventDefault()
+                    event.returnValue = ''
+                })
+            },
+            async fetchAll() {
+                await Promise.all([this.fetchActions(), this.fetchSop()])
+            },
+            async fetchActions() {
+                try {
+                    const res = await fetch('/api/sop/actions')
+                    if (!res.ok) return
+                    const data = await res.json()
+                    this.actions = data.data || []
+                } catch (e) {}
+            },
+            async fetchSop() {
+                try {
+                    const res = await fetch('/api/sop')
+                    if (!res.ok) return
+                    const data = await res.json()
+                    const days = (data.data && data.data.days) ? data.data.days : []
+                    this.days = days.map(day => this.normalizeDay(day))
+                    this.ensureDefaultLast()
+                    if (!this.selectedDayUid && this.days.length > 0) {
+                        this.selectedDayUid = this.days[0]._uid
+                    }
+                } catch (e) {}
+            },
+            normalizeDay(day) {
+                return {
+                    _uid: this.generateUid(),
+                    day: Number(day.day || 0),
+                    is_default: Boolean(day.is_default),
+                    once_tasks: (day.once_tasks || []).map(task => this.normalizeTask(task)),
+                    daily_tasks: (day.daily_tasks || []).map(task => this.normalizeTask(task, true)),
+                    online_minutes: this.normalizeMinutes(day.online_minutes)
+                }
+            },
+            normalizeTask(task, isDaily = false) {
+                return {
+                    _uid: this.generateUid(),
+                    action: task.action || '',
+                    type: isDaily ? 'auto' : (task.type || 'auto'),
+                    params: this.normalizeParams(task.params)
+                }
+            },
+            normalizeParams(params) {
+                return params && typeof params === 'object' ? { ...params } : {}
+            },
+            normalizeMinutes(value) {
+                if (value && typeof value === 'object') {
+                    return {
+                        min: Number(value.min ?? 0),
+                        max: Number(value.max ?? 0)
+                    }
+                }
+                const numericValue = Number(value || 0)
+                return { min: numericValue, max: numericValue }
+            },
+            generateUid() {
+                this.uidSeed += 1
+                return `uid_${Date.now()}_${this.uidSeed}`
+            },
+            ensureDefaultLast() {
+                const defaultItems = this.days.filter(day => day.is_default)
+                const normalItems = this.days.filter(day => !day.is_default)
+                normalItems.sort((a, b) => a.day - b.day)
+                this.days = [...normalItems, ...defaultItems]
+            },
+            selectDay(uid) {
+                this.selectedDayUid = uid
+            },
+            addDay() {
+                const maxDay = this.getMaxDayNumber()
+                const newDay = {
+                    _uid: this.generateUid(),
+                    day: maxDay + 1,
+                    is_default: false,
+                    once_tasks: [],
+                    daily_tasks: [],
+                    online_minutes: { min: 30, max: 120 }
+                }
+                const defaultIndex = this.days.findIndex(day => day.is_default)
+                if (defaultIndex === -1) {
+                    this.days.push(newDay)
+                } else {
+                    this.days.splice(defaultIndex, 0, newDay)
+                }
+                this.selectedDayUid = newDay._uid
+                this.markDirty()
+            },
+            removeDay(day) {
+                if (day.is_default) return
+                const index = this.days.findIndex(item => item._uid === day._uid)
+                if (index === -1) return
+                this.days.splice(index, 1)
+                if (this.selectedDayUid === day._uid) {
+                    const nextDay = this.days[index] || this.days[index - 1] || this.days[0]
+                    this.selectedDayUid = nextDay ? nextDay._uid : null
+                }
+                this.markDirty()
+            },
+            addOnceTask() {
+                const actionId = this.actions[0] ? this.actions[0].action_id : ''
+                const task = this.createTask(actionId, false)
+                this.selectedDay.once_tasks.push(task)
+                this.markDirty()
+            },
+            addDailyTask() {
+                const actionId = this.actions[0] ? this.actions[0].action_id : ''
+                const task = this.createTask(actionId, true)
+                this.selectedDay.daily_tasks.push(task)
+                this.markDirty()
+            },
+            removeOnceTask(task) {
+                this.selectedDay.once_tasks = this.selectedDay.once_tasks.filter(item => item._uid !== task._uid)
+                this.markDirty()
+            },
+            removeDailyTask(task) {
+                this.selectedDay.daily_tasks = this.selectedDay.daily_tasks.filter(item => item._uid !== task._uid)
+                this.markDirty()
+            },
+            createTask(actionId, isDaily) {
+                return {
+                    _uid: this.generateUid(),
+                    action: actionId || '',
+                    type: isDaily ? 'auto' : 'auto',
+                    params: this.buildDefaultParams(actionId)
+                }
+            },
+            handleTaskActionChange(task, isDaily = false) {
+                task.params = this.buildDefaultParams(task.action)
+                if (isDaily) task.type = 'auto'
+                this.markDirty()
+            },
+            buildDefaultParams(actionId) {
+                const meta = this.getActionMeta(actionId)
+                if (!meta || !meta.params_schema) return {}
+                const params = {}
+                Object.entries(meta.params_schema).forEach(([key, schema]) => {
+                    if (schema && Object.prototype.hasOwnProperty.call(schema, 'default')) {
+                        params[key] = schema.default
+                    } else if (schema && schema.type === 'select' && Array.isArray(schema.options)) {
+                        params[key] = schema.options[0] || ''
+                    } else if (schema && schema.type === 'number') {
+                        params[key] = 0
+                    } else {
+                        params[key] = ''
+                    }
+                })
+                return params
+            },
+            getActionMeta(actionId) {
+                return this.actions.find(item => item.action_id === actionId) || null
+            },
+            getParamSchema(task) {
+                const meta = this.getActionMeta(task.action)
+                return meta && meta.params_schema ? meta.params_schema : {}
+            },
+            hasParams(task) {
+                return Object.keys(this.getParamSchema(task)).length > 0
+            },
+            toggleDefault(day) {
+                if (day.is_default) {
+                    this.days.forEach(item => {
+                        if (item._uid !== day._uid) item.is_default = false
+                    })
+                    this.ensureDefaultLast()
+                }
+                this.markDirty()
+            },
+            getDayTitle(day) {
+                if (!day) return ''
+                if (day.is_default) {
+                    const maxDay = this.getMaxDayNumber()
+                    return `Day ${maxDay}+`
+                }
+                return `Day ${day.day}`
+            },
+            getMaxDayNumber() {
+                const normalDays = this.days.filter(day => !day.is_default)
+                if (normalDays.length === 0) return 0
+                return Math.max(...normalDays.map(day => day.day))
+            },
+            getTaskTotal(day) {
+                return (day.once_tasks || []).length + (day.daily_tasks || []).length
+            },
+            getAutoCount(day) {
+                return (day.once_tasks || []).filter(task => task.type === 'auto').length
+            },
+            getManualCount(day) {
+                return (day.once_tasks || []).filter(task => task.type === 'manual').length
+            },
+            getDailyCount(day) {
+                return (day.daily_tasks || []).length
+            },
+            markDirty() {
+                this.dirty = true
+            },
+            setErrors(errors) {
+                this.errorList = Array.isArray(errors) ? errors : []
+                this.errorDayMap = {}
+                this.invalidActionList = []
+                this.errorList.forEach(err => {
+                    if (err.startsWith('missing_daily_tasks:')) {
+                        const day = Number(err.split(':')[1])
+                        this.addDayError(day, 'missing_daily')
+                    } else if (err.startsWith('missing_action:')) {
+                        const day = Number(err.split(':')[1])
+                        this.addDayError(day, 'missing_action')
+                    } else if (err.startsWith('duplicate_day:')) {
+                        const day = Number(err.split(':')[1])
+                        this.addDayError(day, 'duplicate')
+                    } else if (err.startsWith('invalid_action:')) {
+                        const actionId = err.split(':')[1]
+                        if (actionId) this.invalidActionList.push(actionId)
+                    } else if (err === 'missing_default_template') {
+                        this.addDayError('default', 'missing_default')
+                    }
+                })
+            },
+            addDayError(dayKey, type) {
+                if (!this.errorDayMap[dayKey]) this.errorDayMap[dayKey] = {}
+                this.errorDayMap[dayKey][type] = true
+            },
+            hasDayError(day) {
+                if (!day) return false
+                if (day.is_default && this.errorDayMap.default) return true
+                return Boolean(this.errorDayMap[day.day])
+            },
+            getDayCardClass(day) {
+                return {
+                    'border-indigo-500 ring-1 ring-indigo-200': this.selectedDayUid === day._uid,
+                    'border-red-400 ring-1 ring-red-200': this.hasDayError(day),
+                    'border-gray-200': this.selectedDayUid !== day._uid && !this.hasDayError(day)
+                }
+            },
+            getTaskRowClass(task) {
+                return this.hasTaskError(task) ? 'bg-red-50' : ''
+            },
+            getTaskActionClass(task) {
+                return this.hasTaskError(task) ? 'border-red-400' : ''
+            },
+            hasTaskError(task) {
+                if (!task.action) return true
+                return this.invalidActionList.includes(task.action)
+            },
+            buildPayload() {
+                return {
+                    days: this.days.map(day => ({
+                        day: Number(day.day || 0),
+                        is_default: Boolean(day.is_default),
+                        once_tasks: (day.once_tasks || []).map(task => ({
+                            action: task.action || '',
+                            type: task.type || 'auto',
+                            params: task.params || {}
+                        })),
+                        daily_tasks: (day.daily_tasks || []).map(task => ({
+                            action: task.action || '',
+                            type: 'auto',
+                            params: task.params || {}
+                        })),
+                        online_minutes: {
+                            min: Number(day.online_minutes?.min ?? 0),
+                            max: Number(day.online_minutes?.max ?? 0)
+                        }
+                    }))
+                }
+            },
+            async handleValidate() {
+                const success = await this.validateSop(true)
+                if (success) {
+                    Alpine.store('toast').show('校验通过', 'success')
+                }
+            },
+            async validateSop(showToast) {
+                try {
+                    const res = await fetch('/api/sop/validate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.buildPayload())
+                    })
+                    if (!res.ok) {
+                        if (showToast) Alpine.store('toast').show('校验失败', 'error')
+                        return false
+                    }
+                    const data = await res.json()
+                    const errors = (data.data && data.data.errors) ? data.data.errors : []
+                    this.setErrors(errors)
+                    if (errors.length > 0) {
+                        if (showToast) Alpine.store('toast').show('校验失败', 'error')
+                        return false
+                    }
+                    return true
+                } catch (e) {
+                    if (showToast) Alpine.store('toast').show('校验失败', 'error')
+                    return false
+                }
+            },
+            async handleSave() {
+                const valid = await this.validateSop(false)
+                if (!valid) {
+                    Alpine.store('toast').show('校验失败', 'error')
+                    return
+                }
+                try {
+                    const res = await fetch('/api/sop', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.buildPayload())
+                    })
+                    if (!res.ok) {
+                        Alpine.store('toast').show('保存失败', 'error')
+                        return
+                    }
+                    const data = await res.json()
+                    if (data.code !== 0) {
+                        Alpine.store('toast').show(data.msg || '保存失败', 'error')
+                        return
+                    }
+                    this.dirty = false
+                    Alpine.store('toast').show('SOP 已保存', 'success')
+                    await this.fetchSop()
+                } catch (e) {
+                    Alpine.store('toast').show('保存失败', 'error')
+                }
+            },
+            async openRestoreModal() {
+                this.showRestoreModal = true
+                await this.fetchBackups()
+            },
+            async fetchBackups() {
+                try {
+                    const res = await fetch('/api/sop/backups')
+                    if (!res.ok) {
+                        Alpine.store('toast').show('获取备份失败', 'error')
+                        return
+                    }
+                    const data = await res.json()
+                    this.backups = data.data && data.data.files ? data.data.files : []
+                } catch (e) {
+                    Alpine.store('toast').show('获取备份失败', 'error')
+                }
+            },
+            async restoreBackup(filename) {
+                try {
+                    const res = await fetch(`/api/sop/restore/${encodeURIComponent(filename)}`, { method: 'POST' })
+                    if (!res.ok) {
+                        Alpine.store('toast').show('恢复失败', 'error')
+                        return
+                    }
+                    const data = await res.json()
+                    if (data.code !== 0) {
+                        Alpine.store('toast').show(data.msg || '恢复失败', 'error')
+                        return
+                    }
+                    location.reload()
+                } catch (e) {
+                    Alpine.store('toast').show('恢复失败', 'error')
+                }
+            }
+        }
+    }
+</script>
+{% endblock %}

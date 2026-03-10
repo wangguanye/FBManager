@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div x-data="accountsManager()" x-init="fetchAccounts()" class="space-y-6">
+<div x-data="accountsManager()" x-init="init()" class="space-y-6">
     <!-- 顶部操作栏 -->
     <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
         <div class="flex items-center gap-4 w-full sm:w-auto">
@@ -12,6 +12,9 @@
             <button @click="openBatchModal()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                 批量导入
+            </button>
+            <button @click="openCsvModal()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                📁 CSV 导入
             </button>
             <button @click="exportAccounts()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition flex items-center gap-2">
                 📥 导出 CSV
@@ -25,6 +28,28 @@
                     <option value="投放养号中">投放养号中</option>
                     <option value="异常">异常</option>
                     <option value="已封禁">已封禁</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
+            <div class="relative">
+                <select x-model="gradeFilter" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                    <option value="">全部健康等级</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                    <option value="F">F</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                </div>
+            </div>
+            <div class="relative">
+                <select x-model="scoreSort" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                    <option value="score_desc">健康分降序</option>
+                    <option value="score_asc">健康分升序</option>
                 </select>
                 <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
                     <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
@@ -47,6 +72,7 @@
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户名</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">养号进度</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">健康分</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定代理</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定窗口</th>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最后活跃</th>
@@ -54,7 +80,7 @@
                 </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
-                <template x-for="account in accounts" :key="account.id">
+                <template x-for="account in filteredAccounts" :key="account.id">
                     <tr :class="{'bg-red-50': account.status === '已封禁'}" @click="openDetailPanel(account)" class="cursor-pointer">
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="relative" x-data="{ open: false }">
@@ -85,6 +111,12 @@
                                 <div class="bg-blue-600 h-2.5 rounded-full" :style="'width: ' + (account.nurture_day / 14 * 100) + '%'"></div>
                             </div>
                             <div class="text-xs text-gray-500 mt-1">Day <span x-text="account.nurture_day"></span>/14</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center gap-2">
+                                <div class="text-sm font-semibold text-gray-900" x-text="getHealthScoreValue(account)"></div>
+                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full" :class="getHealthBadgeClass(account)" x-text="getHealthGradeValue(account)"></span>
+                            </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             <span x-text="account.proxy ? account.proxy.host + ':' + account.proxy.port : '未绑定'"></span>
@@ -155,6 +187,20 @@
                         <div class="text-sm font-semibold text-gray-900 mb-2">绑定窗口</div>
                         <div class="text-sm text-gray-700" x-text="detailAccount?.browser_window?.name || '未绑定'"></div>
                         <div class="text-xs text-gray-500" x-text="detailAccount?.browser_window?.bit_window_id || ''"></div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="text-sm font-semibold text-gray-900">健康评分</div>
+                            <button class="text-xs text-indigo-600 hover:text-indigo-800" @click="recalculateDetailHealthScore()" :disabled="!detailAccount">重新计算</button>
+                        </div>
+                        <div class="h-56">
+                            <canvas id="healthRadarChart" class="w-full h-56"></canvas>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="text-lg font-semibold text-gray-900" x-text="detailHealthScore?.score ?? '-'"></div>
+                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full" :class="getHealthBadgeClass(detailHealthScore)" x-text="detailHealthScore?.grade ?? '-'"></span>
+                            <div class="text-xs text-gray-500" x-text="detailHealthScore ? formatDate(detailHealthScore.calculated_at) : '-'"></div>
+                        </div>
                     </div>
                     <div class="border border-gray-200 rounded-lg p-4">
                         <div class="flex items-center justify-between mb-2">
@@ -374,8 +420,105 @@
             </div>
         </div>
     </div>
+    <div x-show="showCsvModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeCsvModal()"></div>
+            <div class="inline-block w-full max-w-5xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium leading-6 text-gray-900">CSV 导入账号</h3>
+                    <a href="/api/accounts/import/template" class="text-sm text-indigo-600 hover:text-indigo-800">下载模板</a>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1 space-y-4">
+                        <div class="border border-dashed border-gray-300 rounded-lg p-4 text-center" @dragover.prevent @drop.prevent="handleCsvDrop($event)">
+                            <div class="text-sm text-gray-600">拖拽 CSV 文件到此处</div>
+                            <div class="text-xs text-gray-400 mt-1">支持标准 CSV 或冒号分隔格式</div>
+                            <input type="file" accept=".csv" class="mt-3 w-full text-sm" @change="handleCsvFileChange($event)">
+                            <div class="mt-2 text-xs text-gray-500" x-text="csvFileName || '未选择文件'"></div>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg p-4 space-y-3">
+                            <div class="text-sm font-semibold text-gray-900">导入选项</div>
+                            <label class="flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" x-model="csvOptions.auto_bindWindow" class="rounded border-gray-300">
+                                自动绑定/创建浏览器窗口
+                            </label>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">默认地区</label>
+                                <input type="text" x-model="csvOptions.default_region" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">默认时区</label>
+                                <input type="text" x-model="csvOptions.default_timezone" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <div class="text-sm font-semibold text-gray-900">预览统计</div>
+                            <div class="text-sm text-gray-600 mt-2">
+                                总行数：<span x-text="csvPreviewStats.total"></span>
+                            </div>
+                            <div class="text-sm text-green-600 mt-1">
+                                可导入：<span x-text="csvPreviewStats.valid"></span>
+                            </div>
+                            <div class="text-sm text-red-600 mt-1">
+                                异常行：<span x-text="csvPreviewStats.invalid"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-2 space-y-4">
+                        <div class="border border-gray-200 rounded-lg overflow-hidden">
+                            <div class="px-4 py-2 bg-gray-50 text-sm font-semibold text-gray-700">预览</div>
+                            <div class="max-h-72 overflow-y-auto">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">行号</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">用户名</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">邮箱</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">2FA</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cookie</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profile</th>
+                                            <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        <template x-for="row in csvPreviewRows" :key="row.line">
+                                            <tr :class="row.valid ? '' : 'bg-red-50'">
+                                                <td class="px-3 py-2 text-gray-600" x-text="row.line"></td>
+                                                <td class="px-3 py-2 text-gray-900" x-text="row.username"></td>
+                                                <td class="px-3 py-2 text-gray-600" x-text="row.email"></td>
+                                                <td class="px-3 py-2 text-gray-600" x-text="row.has_2fa ? '有' : '-'"></td>
+                                                <td class="px-3 py-2 text-gray-600" x-text="row.has_cookie ? '有' : '-'"></td>
+                                                <td class="px-3 py-2 text-gray-600" x-text="row.browser_profile_id || '-'"></td>
+                                                <td class="px-3 py-2 text-xs" :class="row.valid ? 'text-green-600' : 'text-red-600'" x-text="row.valid ? '通过' : row.error"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <div class="text-sm font-semibold text-gray-900">导入结果</div>
+                            <div x-show="csvImportResult" class="text-sm text-gray-700 mt-2">
+                                成功导入 <span x-text="csvImportResult.imported || 0"></span> 条，跳过 <span x-text="csvImportResult.skipped || 0"></span> 条
+                            </div>
+                            <div x-show="csvImportErrors.length > 0" class="mt-2 max-h-32 overflow-y-auto text-xs text-red-600">
+                                <template x-for="err in csvImportErrors" :key="err.line">
+                                    <div x-text="'第 ' + err.line + ' 行: ' + err.reason"></div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button type="button" @click="closeCsvModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">关闭</button>
+                    <button type="button" @click="confirmAccountsCsvImport()" :disabled="csvUploading || csvParsedRows.length === 0" class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50">开始导入</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     function accountsManager() {
         return {
@@ -383,24 +526,44 @@
             idleProxies: [],
             idleWindows: [],
             statusFilter: '',
+            gradeFilter: '',
+            scoreSort: 'score_desc',
             searchQuery: '',
             showCreateModal: false,
             showBindModal: false,
             showBatchModal: false,
+            showCsvModal: false,
             showDetailPanel: false,
             showBmBindModal: false,
             batchText: '',
             importResult: null,
+            csvFileName: '',
+            csvPreviewRows: [],
+            csvPreviewErrors: [],
+            csvPreviewStats: { total: 0, valid: 0, invalid: 0 },
+            csvParsedRows: [],
+            csvImportResult: null,
+            csvImportErrors: [],
+            csvUploading: false,
+            csvOptions: {
+                auto_bindWindow: true,
+                default_region: 'US',
+                default_timezone: 'America/New_York'
+            },
             selectedAccount: null,
             selectedProxyId: null,
             selectedWindowId: null,
             detailAccount: null,
             detailAssets: { bm: null, ad_accounts: [], fanpages: [] },
+            detailHealthScore: null,
+            healthScoresMap: {},
+            healthRadarChart: null,
             detailLoading: false,
             bmCandidates: [],
             bmBindMode: 'select',
             selectedBmId: '',
             bmCreateForm: { bm_id: '', name: '', region: '' },
+            initialAccountId: null,
             newAccount: {
                 username: '',
                 password: '',
@@ -412,6 +575,28 @@
                 totp_secret: ''
             },
 
+            init() {
+                const params = new URLSearchParams(window.location.search)
+                this.gradeFilter = params.get('grade') || ''
+                this.statusFilter = params.get('status') || ''
+                this.searchQuery = params.get('q') || ''
+                this.initialAccountId = params.get('account_id')
+                this.fetchAccounts()
+            },
+
+            get filteredAccounts() {
+                let items = [...this.accounts]
+                if (this.gradeFilter) {
+                    items = items.filter(item => (item.health_grade || '') === this.gradeFilter)
+                }
+                if (this.scoreSort === 'score_asc') {
+                    items.sort((a, b) => (a.health_score || 0) - (b.health_score || 0))
+                } else {
+                    items.sort((a, b) => (b.health_score || 0) - (a.health_score || 0))
+                }
+                return items
+            },
+
             async fetchAccounts() {
                 let url = '/api/accounts?';
                 if (this.statusFilter) url += `status=${this.statusFilter}&`;
@@ -420,9 +605,129 @@
                 try {
                     const res = await fetch(url);
                     this.accounts = await res.json();
+                    await this.fetchHealthScores();
                     await this.loadAdAssetsStatus();
+                    if (this.initialAccountId) {
+                        const target = this.accounts.find(item => String(item.id) === String(this.initialAccountId))
+                        if (target) {
+                            this.openDetailPanel(target)
+                            this.initialAccountId = null
+                        }
+                    }
                 } catch (e) {
                     console.error('Failed to fetch accounts', e);
+                }
+            },
+
+            async fetchHealthScores() {
+                try {
+                    const res = await fetch('/api/health/scores')
+                    if (!res.ok) return
+                    const scores = await res.json()
+                    this.healthScoresMap = scores.reduce((acc, item) => {
+                        acc[item.fb_account_id] = item
+                        return acc
+                    }, {})
+                    this.accounts = this.accounts.map(account => {
+                        const scoreItem = this.healthScoresMap[account.id]
+                        account.health_score = scoreItem ? scoreItem.score : 0
+                        account.health_grade = scoreItem ? scoreItem.grade : 'F'
+                        return account
+                    })
+                } catch (e) {
+                    console.error('Failed to fetch health scores', e)
+                }
+            },
+
+            openCsvModal() {
+                this.resetCsvImportState()
+                this.showCsvModal = true
+            },
+
+            closeCsvModal() {
+                this.showCsvModal = false
+            },
+
+            resetCsvImportState() {
+                this.csvFileName = ''
+                this.csvPreviewRows = []
+                this.csvPreviewErrors = []
+                this.csvPreviewStats = { total: 0, valid: 0, invalid: 0 }
+                this.csvParsedRows = []
+                this.csvImportResult = null
+                this.csvImportErrors = []
+                this.csvUploading = false
+            },
+
+            handleCsvFileChange(event) {
+                const file = event.target.files?.[0]
+                if (!file) return
+                this.uploadAccountsCsvPreview(file)
+            },
+
+            handleCsvDrop(event) {
+                const file = event.dataTransfer?.files?.[0]
+                if (!file) return
+                this.uploadAccountsCsvPreview(file)
+            },
+
+            async uploadAccountsCsvPreview(file) {
+                if (!file) return
+                this.csvUploading = true
+                this.csvFileName = file.name
+                try {
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    const res = await fetch('/api/accounts/import/csv', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    if (!res.ok) {
+                        alert('解析失败')
+                        return
+                    }
+                    const payload = await res.json()
+                    const data = payload.data || {}
+                    this.csvPreviewRows = data.preview || []
+                    this.csvPreviewErrors = data.errors || []
+                    this.csvPreviewStats = {
+                        total: data.total || 0,
+                        valid: data.valid || 0,
+                        invalid: data.invalid || 0
+                    }
+                    this.csvParsedRows = data.rows || []
+                } catch (e) {
+                    console.error(e)
+                    alert('解析出错')
+                } finally {
+                    this.csvUploading = false
+                }
+            },
+
+            async confirmAccountsCsvImport() {
+                if (this.csvParsedRows.length === 0) return
+                try {
+                    const res = await fetch('/api/accounts/import/csv/confirm', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            rows: this.csvParsedRows,
+                            options: this.csvOptions
+                        })
+                    })
+                    if (!res.ok) {
+                        alert('导入失败')
+                        return
+                    }
+                    const payload = await res.json()
+                    this.csvImportResult = payload.data || null
+                    this.csvImportErrors = this.csvImportResult?.errors || []
+                    if (this.csvImportResult?.imported > 0) {
+                        this.fetchAccounts()
+                    }
+                } catch (e) {
+                    console.error(e)
+                    alert('导入出错')
                 }
             },
 
@@ -510,13 +815,38 @@
                 return `$${(Number(cents) / 100).toFixed(2)}`
             },
 
+            getHealthScoreValue(account) {
+                if (!account) return '-'
+                return account.score !== undefined ? account.score : (account.health_score ?? 0)
+            },
+
+            getHealthGradeValue(account) {
+                if (!account) return '-'
+                return account.grade || account.health_grade || 'F'
+            },
+
+            getHealthBadgeClass(account) {
+                const grade = this.getHealthGradeValue(account)
+                const map = {
+                    A: 'bg-green-600 text-white',
+                    B: 'bg-blue-600 text-white',
+                    C: 'bg-yellow-500 text-white',
+                    D: 'bg-orange-500 text-white',
+                    F: 'bg-red-600 text-white'
+                }
+                return map[grade] || 'bg-gray-400 text-white'
+            },
+
             async openDetailPanel(account) {
                 this.detailAccount = account
                 this.detailAssets = { bm: null, ad_accounts: [], fanpages: [] }
+                this.detailHealthScore = null
                 this.detailLoading = true
                 this.showDetailPanel = true
                 const assets = await this.fetchAccountAdAssets(account.id)
                 if (assets) this.detailAssets = assets
+                await this.fetchHealthScoreDetail(account.id)
+                this.renderHealthRadarChart()
                 this.detailLoading = false
             },
 
@@ -539,6 +869,73 @@
                 } catch (e) {
                     console.error('Failed to fetch ad assets', e)
                     return null
+                }
+            },
+
+            async fetchHealthScoreDetail(accountId) {
+                try {
+                    const res = await fetch(`/api/health/scores/${accountId}`)
+                    if (!res.ok) return
+                    this.detailHealthScore = await res.json()
+                } catch (e) {
+                    console.error('Failed to fetch health score detail', e)
+                }
+            },
+
+            renderHealthRadarChart() {
+                const canvas = document.getElementById('healthRadarChart')
+                if (!canvas) return
+                const detail = this.detailHealthScore?.detail_json || {}
+                const labels = ['养号进度', '任务完成率', '异常频率', '登录稳定性', '资产完整性']
+                const data = [
+                    detail.nurture_progress || 0,
+                    detail.task_completion || 0,
+                    detail.error_frequency || 0,
+                    detail.login_stability || 0,
+                    detail.asset_completeness || 0
+                ]
+                if (this.healthRadarChart) {
+                    this.healthRadarChart.destroy()
+                }
+                this.healthRadarChart = new Chart(canvas, {
+                    type: 'radar',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: '健康评分',
+                            data,
+                            backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                            borderColor: 'rgba(79, 70, 229, 0.8)',
+                            pointBackgroundColor: 'rgba(79, 70, 229, 0.9)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            r: {
+                                min: 0,
+                                max: 100,
+                                ticks: { stepSize: 20 }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                })
+            },
+
+            async recalculateDetailHealthScore() {
+                if (!this.detailAccount) return
+                try {
+                    const res = await fetch(`/api/health/recalculate/${this.detailAccount.id}`, { method: 'POST' })
+                    if (!res.ok) return
+                    this.detailHealthScore = await res.json()
+                    this.renderHealthRadarChart()
+                    await this.fetchHealthScores()
+                } catch (e) {
+                    console.error('Failed to recalculate health score', e)
                 }
             },
 

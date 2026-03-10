@@ -325,6 +325,56 @@ async def execute_account_tasks(account_id: int):
             
         logger.info(f"账号 {account_id} 任务执行完毕")
 
+async def execute_custom_action(account_id: int, action: str, params: dict | None) -> int:
+    assert account_id > 0
+    assert action
+    async with AsyncSessionLocal() as db:
+        stmt_account = select(FBAccount).where(FBAccount.id == account_id).options(
+            selectinload(FBAccount.browser_window),
+            selectinload(FBAccount.proxy)
+        )
+        result_account = await db.execute(stmt_account)
+        account = result_account.scalar_one_or_none()
+        if not account:
+            raise ValueError("account_not_found")
+        payload_params = params if isinstance(params, dict) else {}
+        now = datetime.now()
+        task = NurtureTask(
+            fb_account_id=account_id,
+            day_number=account.nurture_day or 0,
+            scheduled_date=now.date(),
+            scheduled_time=now,
+            action=action,
+            task_type="manual",
+            execution_type="auto",
+            status="running",
+            result_log=None,
+            retry_count=0
+        )
+        db.add(task)
+        await db.commit()
+        await db.refresh(task)
+
+    executor = RPAExecutor()
+    actions = [{"action": f"rpa.{action}", "params": payload_params}]
+
+    async def _safe_enqueue():
+        try:
+            await executor.enqueue_task(account, task, actions)
+        except Exception as e:
+            logger.error(f"Custom action enqueue failed: {e}")
+            async with AsyncSessionLocal() as inner_db:
+                db_task = await inner_db.get(NurtureTask, task.id)
+                if db_task:
+                    db_task.status = "failed"
+                    db_task.result_log = str(e)
+                    db_task.retry_count += 1
+                    inner_db.add(db_task)
+                    await inner_db.commit()
+
+    asyncio.create_task(_safe_enqueue())
+    return task.id
+
 async def check_and_execute_tasks():
     """
     检查并执行到期的养号任务

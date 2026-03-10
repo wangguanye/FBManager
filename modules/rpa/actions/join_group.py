@@ -7,6 +7,15 @@ import time
 
 from modules.rpa.base import BaseAction, register_action
 
+META = {
+    "action_id": "join_group",
+    "name": "加入群组",
+    "params_schema": {
+        "group_url": {"type": "string", "label": "群组链接", "default": ""},
+        "max_count": {"type": "number", "label": "最大数量", "default": 1}
+    }
+}
+
 @register_action
 class JoinGroupAction(BaseAction):
     action_id = "rpa.join_group"

@@ -11,6 +11,9 @@ from modules.rpa.browser_client import BitBrowserClient, BitBrowserNotRunningErr
 from datetime import datetime
 import os
 from uuid import uuid4
+import csv
+import io
+from typing import Any, Dict, List, Tuple
 
 async def create_fb_account(db: AsyncSession, account: FBAccountCreate):
     """创建 FB 账号并加密敏感信息"""
@@ -383,6 +386,392 @@ async def close_browser_window(db: AsyncSession, window_id: int):
         raise HTTPException(status_code=503, detail="BitBrowser is not running")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to close browser: {str(e)}")
+
+ACCOUNT_HEADERS = ("username", "password", "totp_secret", "email", "email_password", "cookie", "browser_profile_id")
+ACCOUNT_REQUIRED_FIELDS = ("username", "password", "email", "email_password")
+PROXY_HEADERS = ("ip", "port", "username", "password")
+PROXY_REQUIRED_FIELDS = ("ip", "port")
+
+def _clean_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+def _get_first_non_empty_line(content: str) -> str:
+    for line in content.splitlines():
+        if line.strip():
+            return line
+    return ""
+
+def _has_standard_header(first_line: str, expected_headers: Tuple[str, ...]) -> bool:
+    if "," not in first_line:
+        return False
+    reader = csv.reader([first_line])
+    row = next(reader, [])
+    header_set = {str(item).strip().lower() for item in row if item is not None}
+    expected_set = set(expected_headers)
+    return expected_set.issubset(header_set)
+
+def _build_account_preview_item(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "line": payload.get("line"),
+        "username": payload.get("username"),
+        "email": payload.get("email"),
+        "has_2fa": bool(payload.get("totp_secret")),
+        "has_cookie": bool(payload.get("cookie")),
+        "browser_profile_id": payload.get("browser_profile_id"),
+        "valid": payload.get("valid", True),
+        "error": payload.get("error")
+    }
+
+def _build_proxy_preview_item(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "line": payload.get("line"),
+        "host": payload.get("host"),
+        "port": payload.get("port"),
+        "username": payload.get("username"),
+        "has_password": bool(payload.get("password")),
+        "valid": payload.get("valid", True),
+        "error": payload.get("error")
+    }
+
+def _parse_accounts_colon_lines(content: str) -> Dict[str, Any]:
+    preview = []
+    rows = []
+    errors = []
+    total = 0
+    for line_index, raw_line in enumerate(content.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        total += 1
+        parts = [part.strip() for part in line.split(":")]
+        error_reason = None
+        if len(parts) < 6:
+            error_reason = "格式错误：字段数量不足"
+        username = parts[0].strip() if len(parts) > 0 else ""
+        password = parts[1].strip() if len(parts) > 1 else ""
+        totp_secret = parts[2].strip() if len(parts) > 2 else ""
+        email = parts[3].strip() if len(parts) > 3 else ""
+        email_password = parts[4].strip() if len(parts) > 4 else ""
+        cookie = ""
+        browser_profile_id = ""
+        if len(parts) >= 6:
+            if len(parts) == 6:
+                cookie = ""
+                browser_profile_id = parts[5].strip()
+            else:
+                cookie = ":".join(parts[5:-1]).strip()
+                browser_profile_id = parts[-1].strip()
+        if not error_reason:
+            missing_fields = [field for field, value in {
+                "username": username,
+                "password": password,
+                "email": email,
+                "email_password": email_password
+            }.items() if not value]
+            if missing_fields:
+                error_reason = "必填字段缺失：" + "、".join(missing_fields)
+        row_payload = {
+            "line": line_index,
+            "username": username,
+            "password": password,
+            "totp_secret": totp_secret,
+            "email": email,
+            "email_password": email_password,
+            "cookie": cookie,
+            "browser_profile_id": browser_profile_id
+        }
+        if error_reason:
+            preview.append(_build_account_preview_item({**row_payload, "valid": False, "error": error_reason}))
+            errors.append({"line": line_index, "reason": error_reason})
+            continue
+        preview.append(_build_account_preview_item({**row_payload, "valid": True}))
+        rows.append(row_payload)
+    valid = len(rows)
+    invalid = len(errors)
+    return {"preview": preview, "rows": rows, "errors": errors, "total": total, "valid": valid, "invalid": invalid}
+
+def _parse_accounts_standard_csv(content: str) -> Dict[str, Any]:
+    preview = []
+    rows = []
+    errors = []
+    total = 0
+    reader = csv.DictReader(io.StringIO(content))
+    for row in reader:
+        line_index = reader.line_num
+        row_lower = {str(key).strip().lower(): value for key, value in row.items() if key}
+        username = _clean_text(row_lower.get("username"))
+        password = _clean_text(row_lower.get("password"))
+        totp_secret = _clean_text(row_lower.get("totp_secret"))
+        email = _clean_text(row_lower.get("email"))
+        email_password = _clean_text(row_lower.get("email_password"))
+        cookie = _clean_text(row_lower.get("cookie"))
+        browser_profile_id = _clean_text(row_lower.get("browser_profile_id"))
+        if not any([username, password, totp_secret, email, email_password, cookie, browser_profile_id]):
+            continue
+        total += 1
+        error_reason = None
+        missing_fields = [field for field, value in {
+            "username": username,
+            "password": password,
+            "email": email,
+            "email_password": email_password
+        }.items() if not value]
+        if missing_fields:
+            error_reason = "必填字段缺失：" + "、".join(missing_fields)
+        row_payload = {
+            "line": line_index,
+            "username": username,
+            "password": password,
+            "totp_secret": totp_secret,
+            "email": email,
+            "email_password": email_password,
+            "cookie": cookie,
+            "browser_profile_id": browser_profile_id
+        }
+        if error_reason:
+            preview.append(_build_account_preview_item({**row_payload, "valid": False, "error": error_reason}))
+            errors.append({"line": line_index, "reason": error_reason})
+            continue
+        preview.append(_build_account_preview_item({**row_payload, "valid": True}))
+        rows.append(row_payload)
+    valid = len(rows)
+    invalid = len(errors)
+    return {"preview": preview, "rows": rows, "errors": errors, "total": total, "valid": valid, "invalid": invalid}
+
+def _parse_proxies_colon_lines(content: str) -> Dict[str, Any]:
+    preview = []
+    rows = []
+    errors = []
+    total = 0
+    for line_index, raw_line in enumerate(content.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        total += 1
+        parts = [part.strip() for part in line.split(":")]
+        error_reason = None
+        host = parts[0].strip() if len(parts) > 0 else ""
+        port_value = parts[1].strip() if len(parts) > 1 else ""
+        username = parts[2].strip() if len(parts) > 2 else ""
+        password = parts[3].strip() if len(parts) > 3 else ""
+        port = None
+        if not host or not port_value:
+            error_reason = "必填字段缺失：ip、port"
+        if not error_reason:
+            try:
+                port = int(port_value)
+            except ValueError:
+                error_reason = "端口必须是数字"
+        row_payload = {
+            "line": line_index,
+            "host": host,
+            "port": port,
+            "username": username or None,
+            "password": password or None
+        }
+        if error_reason:
+            preview.append(_build_proxy_preview_item({**row_payload, "valid": False, "error": error_reason}))
+            errors.append({"line": line_index, "reason": error_reason})
+            continue
+        preview.append(_build_proxy_preview_item({**row_payload, "valid": True}))
+        rows.append(row_payload)
+    valid = len(rows)
+    invalid = len(errors)
+    return {"preview": preview, "rows": rows, "errors": errors, "total": total, "valid": valid, "invalid": invalid}
+
+def _parse_proxies_standard_csv(content: str) -> Dict[str, Any]:
+    preview = []
+    rows = []
+    errors = []
+    total = 0
+    reader = csv.DictReader(io.StringIO(content))
+    for row in reader:
+        line_index = reader.line_num
+        row_lower = {str(key).strip().lower(): value for key, value in row.items() if key}
+        host = _clean_text(row_lower.get("ip")) or _clean_text(row_lower.get("host"))
+        port_value = _clean_text(row_lower.get("port"))
+        username = _clean_text(row_lower.get("username"))
+        password = _clean_text(row_lower.get("password"))
+        if not any([host, port_value, username, password]):
+            continue
+        total += 1
+        error_reason = None
+        port = None
+        if not host or not port_value:
+            error_reason = "必填字段缺失：ip、port"
+        if not error_reason:
+            try:
+                port = int(port_value)
+            except ValueError:
+                error_reason = "端口必须是数字"
+        row_payload = {
+            "line": line_index,
+            "host": host,
+            "port": port,
+            "username": username or None,
+            "password": password or None
+        }
+        if error_reason:
+            preview.append(_build_proxy_preview_item({**row_payload, "valid": False, "error": error_reason}))
+            errors.append({"line": line_index, "reason": error_reason})
+            continue
+        preview.append(_build_proxy_preview_item({**row_payload, "valid": True}))
+        rows.append(row_payload)
+    valid = len(rows)
+    invalid = len(errors)
+    return {"preview": preview, "rows": rows, "errors": errors, "total": total, "valid": valid, "invalid": invalid}
+
+async def preview_accounts_csv(file_content: str) -> Dict[str, Any]:
+    assert isinstance(file_content, str)
+    content = file_content.replace("\ufeff", "")
+    first_line = _get_first_non_empty_line(content)
+    if not first_line:
+        return {"preview": [], "rows": [], "errors": [], "total": 0, "valid": 0, "invalid": 0}
+    is_standard = _has_standard_header(first_line, ACCOUNT_HEADERS)
+    if is_standard:
+        return _parse_accounts_standard_csv(content)
+    return _parse_accounts_colon_lines(content)
+
+async def preview_proxies_csv(file_content: str) -> Dict[str, Any]:
+    assert isinstance(file_content, str)
+    content = file_content.replace("\ufeff", "")
+    first_line = _get_first_non_empty_line(content)
+    if not first_line:
+        return {"preview": [], "rows": [], "errors": [], "total": 0, "valid": 0, "invalid": 0}
+    is_standard = _has_standard_header(first_line, PROXY_HEADERS)
+    if is_standard:
+        return _parse_proxies_standard_csv(content)
+    return _parse_proxies_colon_lines(content)
+
+async def confirm_accounts_csv_import(db: AsyncSession, rows: List[Dict[str, Any]], options: Dict[str, Any]) -> Dict[str, Any]:
+    imported = 0
+    skipped = 0
+    errors = []
+    default_region = _clean_text(options.get("default_region")) or "US"
+    default_timezone = _clean_text(options.get("default_timezone")) or "America/New_York"
+    auto_bind_window = bool(options.get("auto_bindWindow", True))
+    for row in rows:
+        username = _clean_text(row.get("username"))
+        password = _clean_text(row.get("password"))
+        email = _clean_text(row.get("email"))
+        email_password = _clean_text(row.get("email_password"))
+        totp_secret = _clean_text(row.get("totp_secret"))
+        cookie = _clean_text(row.get("cookie"))
+        browser_profile_id = _clean_text(row.get("browser_profile_id"))
+        line = row.get("line")
+        missing_fields = [field for field, value in {
+            "username": username,
+            "password": password,
+            "email": email,
+            "email_password": email_password
+        }.items() if not value]
+        if missing_fields:
+            skipped += 1
+            errors.append({"line": line, "reason": "必填字段缺失：" + "、".join(missing_fields)})
+            continue
+        stmt = select(FBAccount).where(FBAccount.username == username)
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none():
+            skipped += 1
+            errors.append({"line": line, "reason": f"用户名已存在：{username}"})
+            continue
+        browser_window_id = None
+        notes = None
+        if auto_bind_window and browser_profile_id:
+            stmt_win = select(BrowserWindow).where(BrowserWindow.bit_window_id == browser_profile_id)
+            res_win = await db.execute(stmt_win)
+            win = res_win.scalar_one_or_none()
+            if win:
+                if win.status == "空闲":
+                    browser_window_id = win.id
+                    win.status = "使用中"
+                    db.add(win)
+                else:
+                    notes = f"Browser Profile {browser_profile_id} found but busy/bound."
+            else:
+                new_window = BrowserWindow(
+                    bit_window_id=browser_profile_id,
+                    name=browser_profile_id,
+                    status="使用中"
+                )
+                db.add(new_window)
+                await db.flush()
+                browser_window_id = new_window.id
+        new_account = FBAccount(
+            username=username,
+            password_encrypted=encrypt_value(password),
+            totp_secret_encrypted=encrypt_value(totp_secret) if totp_secret else None,
+            email=email,
+            email_password_encrypted=encrypt_value(email_password),
+            cookie_encrypted=encrypt_value(cookie) if cookie else None,
+            region=default_region,
+            target_timezone=default_timezone,
+            status="待养号",
+            browser_window_id=browser_window_id,
+            notes=notes
+        )
+        db.add(new_account)
+        imported += 1
+    await db.commit()
+    return {"imported": imported, "skipped": skipped, "errors": errors}
+
+async def confirm_proxies_csv_import(db: AsyncSession, rows: List[Dict[str, Any]], options: Dict[str, Any]) -> Dict[str, Any]:
+    imported = 0
+    skipped = 0
+    errors = []
+    default_type = _clean_text(options.get("default_type")) or "socks5"
+    default_region = _clean_text(options.get("default_region")) or None
+    for row in rows:
+        host = _clean_text(row.get("host"))
+        port_value = row.get("port")
+        username = _clean_text(row.get("username")) or None
+        password = _clean_text(row.get("password")) or None
+        line = row.get("line")
+        if not host or port_value is None:
+            skipped += 1
+            errors.append({"line": line, "reason": "必填字段缺失：ip、port"})
+            continue
+        try:
+            port = int(port_value)
+        except ValueError:
+            skipped += 1
+            errors.append({"line": line, "reason": "端口必须是数字"})
+            continue
+        stmt = select(ProxyIP).where(and_(ProxyIP.host == host, ProxyIP.port == port))
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none():
+            skipped += 1
+            errors.append({"line": line, "reason": f"代理已存在：{host}:{port}"})
+            continue
+        new_proxy = ProxyIP(
+            host=host,
+            port=port,
+            username=username,
+            password_encrypted=encrypt_value(password) if password else None,
+            type=default_type,
+            region=default_region,
+            status="空闲"
+        )
+        db.add(new_proxy)
+        imported += 1
+    await db.commit()
+    return {"imported": imported, "skipped": skipped, "errors": errors}
+
+def build_accounts_csv_template() -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(list(ACCOUNT_HEADERS))
+    writer.writerow(["user001", "pass001", "2fa-secret", "user001@example.com", "emailpass", "cookie-string", "profile001"])
+    return output.getvalue()
+
+def build_proxies_csv_template() -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(list(PROXY_HEADERS))
+    writer.writerow(["130.180.231.83", "8225", "user", "pass"])
+    return output.getvalue()
 
 async def batch_import_accounts(db: AsyncSession, raw_text: str):
     """批量导入 FB 账号"""

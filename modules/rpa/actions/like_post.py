@@ -2,6 +2,14 @@ from modules.rpa.base import BaseAction, register_action
 import random
 import asyncio
 
+META = {
+    "action_id": "like_post",
+    "name": "点赞帖子",
+    "params_schema": {
+        "max_count": {"type": "number", "label": "最大数量", "default": 3}
+    }
+}
+
 @register_action
 class LikePostAction(BaseAction):
     action_id = "rpa.like_post"

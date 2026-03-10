@@ -8,6 +8,15 @@ from modules.rpa.base import BaseAction, register_action
 from db.database import AsyncSessionLocal
 from modules.asset.service import pick_comment
 
+META = {
+    "action_id": "comment_post",
+    "name": "评论帖子",
+    "params_schema": {
+        "max_count": {"type": "number", "label": "最大数量", "default": 1},
+        "comment_pool": {"type": "string", "label": "评论语料库", "default": "en"}
+    }
+}
+
 @register_action
 class CommentPostAction(BaseAction):
     action_id = "rpa.comment_post"

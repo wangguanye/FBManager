@@ -3,6 +3,14 @@ import random
 import asyncio
 import time
 
+META = {
+    "action_id": "scroll_feed",
+    "name": "滚动浏览 Feed",
+    "params_schema": {
+        "duration_min": {"type": "number", "label": "持续时长(分)", "default": 5}
+    }
+}
+
 @register_action
 class ScrollFeedAction(BaseAction):
     action_id = "rpa.scroll_feed"

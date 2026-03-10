@@ -6,6 +6,20 @@ import random
 
 from modules.rpa.base import BaseAction, register_action
 
+META = {
+    "action_id": "update_profile",
+    "name": "更新个人资料",
+    "params_schema": {
+        "field": {
+            "type": "select",
+            "label": "字段",
+            "options": ["city", "hometown", "school", "workplace", "bio", "birthday", "gender", "language", "relationship", "website", "privacy"],
+            "default": "city"
+        },
+        "value": {"type": "string", "label": "值", "default": ""}
+    }
+}
+
 @register_action
 class UpdateProfileAction(BaseAction):
     action_id = "rpa.update_profile"

@@ -5,6 +5,15 @@ from db.database import AsyncSessionLocal
 from modules.asset.service import pick_comment
 from modules.rpa.base import BaseAction, register_action
 
+META = {
+    "action_id": "share_post",
+    "name": "分享帖子",
+    "params_schema": {
+        "max_count": {"type": "number", "label": "最大数量", "default": 1},
+        "comment_pool": {"type": "string", "label": "评论语料库", "default": "en"}
+    }
+}
+
 @register_action
 class SharePostAction(BaseAction):
     action_id = "rpa.share_post"

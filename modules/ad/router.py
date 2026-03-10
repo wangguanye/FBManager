@@ -7,6 +7,7 @@ import csv
 import io
 from db.database import get_db
 from modules.ad import service, schemas
+from modules.ad.budget_engine import BudgetEngine, read_budget_engine_config, save_budget_engine_config
 
 router = APIRouter(tags=["Ads"])
 
@@ -67,6 +68,24 @@ async def ad_account_detail(id: int, db: AsyncSession = Depends(get_db)):
         "recent_stats": stats_payload,
         "budget_changes": budget_payload,
     }
+
+@router.get("/ad-accounts/{id}/upgrade-check")
+async def check_budget_upgrade(id: int):
+    engine = BudgetEngine()
+    data = await engine.check_upgrade_eligibility(id)
+    return {"code": 0, "data": data, "msg": ""}
+
+@router.post("/ad-accounts/{id}/upgrade")
+async def execute_budget_upgrade(id: int):
+    engine = BudgetEngine()
+    data = await engine.auto_upgrade(id)
+    return {"code": 0, "data": data, "msg": ""}
+
+@router.get("/ad-accounts/{id}/budget-history")
+async def ad_account_budget_history(id: int, db: AsyncSession = Depends(get_db)):
+    history = await service.get_budget_history(db, id)
+    payload = [schemas.BudgetChangeOut.model_validate(item).model_dump() for item in history]
+    return {"code": 0, "data": payload, "msg": ""}
 
 @router.get("/fanpages", response_model=List[schemas.FanpageOut])
 async def list_fanpages(fb_account_id: Optional[int] = None, db: AsyncSession = Depends(get_db)):
@@ -141,6 +160,14 @@ async def export_ad_stats(
 @router.get("/budget-changes", response_model=List[schemas.BudgetChangeOut])
 async def budget_changes(ad_account_id: int = Query(...), db: AsyncSession = Depends(get_db)):
     return await service.get_budget_history(db, ad_account_id)
+
+@router.put("/settings/budget-engine")
+async def update_budget_engine(payload: schemas.BudgetEngineConfigIn):
+    current_config = read_budget_engine_config()
+    update_data = payload.model_dump(exclude_none=True)
+    merged = {**current_config, **update_data}
+    saved = save_budget_engine_config(merged)
+    return {"code": 0, "data": saved, "msg": ""}
 
 @router.get("/ad-overview", response_model=Dict[str, Any])
 async def ad_overview(db: AsyncSession = Depends(get_db)):

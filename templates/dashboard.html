@@ -72,6 +72,43 @@
         </div>
     </div>
 
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-medium text-gray-900">账号健康概览</h3>
+            <button class="px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700" @click="recalculateHealthScores()">🔄 重新计算</button>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <template x-for="item in healthGradeConfig" :key="item.grade">
+                        <a class="flex flex-col items-center space-y-2" :href="`/accounts?grade=${item.grade}`">
+                            <div class="w-20 h-20 rounded-full flex items-center justify-center"
+                                 :style="`background: conic-gradient(${item.color} ${getHealthGradePercent(item.grade)}%, #e5e7eb 0)`">
+                                <div class="w-14 h-14 rounded-full bg-white flex flex-col items-center justify-center">
+                                    <div class="text-lg font-semibold text-gray-900" x-text="healthSummary.counts[item.grade] || 0"></div>
+                                    <div class="text-xs text-gray-500" x-text="item.grade"></div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-500">等级</div>
+                        </a>
+                    </template>
+                </div>
+            </div>
+            <div class="space-y-3">
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-xs text-gray-500">平均健康分</div>
+                    <div class="text-2xl font-semibold text-gray-900" x-text="healthSummary.averageScore"></div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="text-xs text-gray-500">最低分账号</div>
+                    <div class="text-sm font-semibold text-red-600" x-text="healthSummary.lowestAccountName || '-'"></div>
+                    <a class="text-xs text-indigo-600 hover:text-indigo-800" x-show="healthSummary.lowestAccountId"
+                       :href="`/accounts?account_id=${healthSummary.lowestAccountId}`">查看详情</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div x-show="showQueueModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
         <div class="flex items-center justify-center min-h-screen px-4 text-center">
             <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showQueueModal = false"></div>
@@ -295,6 +332,22 @@ function dashboard() {
         adOverviewChart: null,
         showQueueModal: false,
         maxConcurrentInput: 1,
+        healthScores: [],
+        healthAccountsMap: {},
+        healthSummary: {
+            counts: { A: 0, B: 0, C: 0, D: 0, F: 0 },
+            averageScore: 0,
+            lowestAccountId: null,
+            lowestAccountName: '',
+            totalActive: 0
+        },
+        healthGradeConfig: [
+            { grade: 'A', color: '#16a34a' },
+            { grade: 'B', color: '#2563eb' },
+            { grade: 'C', color: '#f59e0b' },
+            { grade: 'D', color: '#f97316' },
+            { grade: 'F', color: '#dc2626' }
+        ],
         accountStatusConfig: [
             { key: '待养号', label: '待养号', color: 'text-blue-600' },
             { key: '养号中', label: '养号中', color: 'text-yellow-600' },
@@ -323,6 +376,7 @@ function dashboard() {
             this.fetchSchedulerQueue();
             this.fetchAlerts();
             this.fetchTodayTasks();
+            this.fetchHealthOverview();
         },
         fetchRealtime() {
             this.fetchAdOverview();
@@ -331,6 +385,7 @@ function dashboard() {
             this.fetchSchedulerQueue();
             this.fetchAlerts();
             this.fetchTodayTasks();
+            this.fetchHealthOverview();
         },
 
         async fetchStats() {
@@ -388,6 +443,70 @@ function dashboard() {
                 if (res.ok) {
                     this.adOverview = await res.json();
                     this.renderAdOverviewChart();
+                }
+            } catch (e) { console.error(e); }
+        },
+        async fetchHealthOverview() {
+            try {
+                const [scoresRes, accountsRes] = await Promise.all([
+                    fetch('/api/health/scores'),
+                    fetch('/api/accounts')
+                ])
+                if (!scoresRes.ok || !accountsRes.ok) return
+                const scores = await scoresRes.json()
+                const accounts = await accountsRes.json()
+                this.healthScores = Array.isArray(scores) ? scores : []
+                this.healthAccountsMap = accounts.reduce((acc, item) => {
+                    acc[item.id] = item
+                    return acc
+                }, {})
+                this.updateHealthSummary()
+            } catch (e) { console.error(e); }
+        },
+        updateHealthSummary() {
+            const counts = { A: 0, B: 0, C: 0, D: 0, F: 0 }
+            const scoreMap = this.healthScores.reduce((acc, item) => {
+                if (item.grade) counts[item.grade] = (counts[item.grade] || 0) + 1
+                acc[item.fb_account_id] = item
+                return acc
+            }, {})
+            const activeAccounts = Object.values(this.healthAccountsMap).filter(item => item.status !== '已封禁')
+            const totalActive = activeAccounts.length
+            let sumScore = 0
+            let lowestScore = null
+            let lowestAccount = null
+            activeAccounts.forEach((account) => {
+                const scoreItem = scoreMap[account.id]
+                const score = scoreItem ? Number(scoreItem.score) : 0
+                sumScore += score
+                if (lowestScore === null || score < lowestScore) {
+                    lowestScore = score
+                    lowestAccount = account
+                }
+            })
+            const averageScore = totalActive > 0 ? Math.round(sumScore / totalActive) : 0
+            this.healthSummary = {
+                counts,
+                averageScore,
+                lowestAccountId: lowestAccount ? lowestAccount.id : null,
+                lowestAccountName: lowestAccount ? lowestAccount.username : '',
+                totalActive
+            }
+        },
+        getHealthGradePercent(grade) {
+            const total = Object.values(this.healthSummary.counts).reduce((sum, value) => sum + value, 0)
+            if (!total) return 0
+            const count = this.healthSummary.counts[grade] || 0
+            return Math.round((count / total) * 100)
+        },
+        async recalculateHealthScores() {
+            try {
+                const res = await fetch('/api/health/recalculate', { method: 'POST' })
+                if (res.ok) {
+                    await this.fetchHealthOverview()
+                    showToast('健康评分已重新计算', 'success')
+                } else {
+                    showToast('健康评分重算失败', 'error')
                 }
             } catch (e) { console.error(e); }
         },

@@ -13,3 +13,5 @@ from modules.rpa.actions.enable_2fa import Enable2FAAction
 from modules.rpa.actions.view_stories import ViewStoriesAction
 from modules.rpa.actions.visit_profile import VisitProfileAction
 from modules.rpa.actions.share_post import SharePostAction
+from modules.rpa.actions.create_campaign import CreateCampaignAction
+from modules.rpa.actions.adjust_budget import AdjustBudgetAction

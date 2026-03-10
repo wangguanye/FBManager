@@ -4,6 +4,15 @@ import time
 
 from modules.rpa.base import BaseAction, register_action
 
+META = {
+    "action_id": "visit_profile",
+    "name": "访问用户主页",
+    "params_schema": {
+        "target_url": {"type": "string", "label": "目标主页链接", "default": ""},
+        "browse_seconds": {"type": "number", "label": "浏览秒数", "default": 10}
+    }
+}
+
 @register_action
 class VisitProfileAction(BaseAction):
     action_id = "rpa.visit_profile"

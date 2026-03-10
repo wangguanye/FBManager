@@ -3,6 +3,14 @@ import random
 
 from modules.rpa.base import BaseAction, register_action
 
+META = {
+    "action_id": "view_stories",
+    "name": "查看故事",
+    "params_schema": {
+        "count": {"type": "number", "label": "观看数量", "default": 5}
+    }
+}
+
 @register_action
 class ViewStoriesAction(BaseAction):
     action_id = "rpa.view_stories"

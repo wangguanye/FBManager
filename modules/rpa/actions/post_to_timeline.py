@@ -12,6 +12,16 @@ from modules.rpa.base import BaseAction, register_action
 from db.database import AsyncSessionLocal
 from modules.monitor.models import ActionLog
 
+META = {
+    "action_id": "post_to_timeline",
+    "name": "主页发帖",
+    "params_schema": {
+        "content": {"type": "string", "label": "内容", "default": ""},
+        "image_url": {"type": "string", "label": "图片路径", "default": ""},
+        "max_per_day": {"type": "number", "label": "每日最大次数", "default": 3}
+    }
+}
+
 @register_action
 class PostToTimelineAction(BaseAction):
     action_id = "rpa.post_to_timeline"
