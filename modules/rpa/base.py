@@ -1,4 +1,7 @@
 from abc import ABC, abstractmethod
+import importlib
+import pkgutil
+from pathlib import Path
 import asyncio
 import random
 from typing import Dict, Any, Type
@@ -45,3 +48,15 @@ def register_action(cls):
     if hasattr(cls, "action_id"):
         ACTION_REGISTRY[cls.action_id] = cls
     return cls
+
+def discover_actions():
+    actions_path = Path(__file__).resolve().parent / "actions"
+    if not actions_path.exists():
+        return []
+    modules = []
+    for module_info in pkgutil.iter_modules([str(actions_path)]):
+        if module_info.name.startswith("_"):
+            continue
+        module_name = f"modules.rpa.actions.{module_info.name}"
+        modules.append(importlib.import_module(module_name))
+    return modules

@@ -13,7 +13,7 @@
         </button>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
         <div class="bg-white rounded-lg shadow p-6">
             <h3 class="text-gray-500 text-sm font-medium">账号总数</h3>
             <div class="mt-3 grid grid-cols-2 gap-3">
@@ -38,6 +38,14 @@
                     <div class="text-green-600">完成: <span x-text="stats.task_stats.completed || 0"></span></div>
                     <div class="text-red-600">失败: <span x-text="stats.task_stats.failed || 0"></span></div>
                 </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-gray-500 text-sm font-medium">平均健康分</h3>
+            <div class="mt-2 flex items-end justify-between">
+                <div class="text-3xl font-bold" :class="getHealthScoreColor(healthOverview.average_score)" x-text="healthOverview.average_score ?? 0"></div>
+                <div class="text-xs text-gray-500">覆盖 <span x-text="healthOverview.total || 0"></span> 个账号</div>
             </div>
         </div>
 
@@ -357,6 +365,9 @@ function dashboard() {
             { key: '已封禁', label: '已封禁', color: 'text-red-600' }
         ],
         
+        healthOverview: { average_score: 0, total: 0 },
+        healthScoreThresholds: { good: 80, warn: 60 },
+
         get manualTasks() {
             return this.todayTasks.filter(t => t.execution_type === 'manual' && t.status === 'pending');
         },
@@ -448,6 +459,7 @@ function dashboard() {
         },
         async fetchHealthOverview() {
             try {
+                await this.fetchHealthOverviewStats();
                 const [scoresRes, accountsRes] = await Promise.all([
                     fetch('/api/health/scores'),
                     fetch('/api/accounts')
@@ -462,6 +474,18 @@ function dashboard() {
                 }, {})
                 this.updateHealthSummary()
             } catch (e) { console.error(e); }
+        },
+        async fetchHealthOverviewStats() {
+            try {
+                const res = await fetch('/api/health/overview');
+                if (!res.ok) return;
+                this.healthOverview = await res.json();
+            } catch (e) { console.error(e); }
+        },
+        getHealthScoreColor(score) {
+            if (score >= this.healthScoreThresholds.good) return 'text-green-600';
+            if (score >= this.healthScoreThresholds.warn) return 'text-yellow-600';
+            return 'text-red-600';
         },
         updateHealthSummary() {
             const counts = { A: 0, B: 0, C: 0, D: 0, F: 0 }

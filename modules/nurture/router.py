@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import date, datetime
@@ -40,18 +41,8 @@ async def run_account_tasks(
     db: AsyncSession = Depends(get_db)
 ):
     """立即触发执行账号任务"""
-    # 这里直接调用 service 的执行函数
-    # 注意：execute_account_tasks 是异步且可能耗时，如果在 API 中直接 await，会阻塞请求直到完成
-    # 用户要求 "立即触发"，通常意味着异步触发
-    # 但如果用户想看结果，可能需要同步
-    # 鉴于 execute_account_tasks 内部模拟了 sleep(2)，我们可以 await
-    # 但如果任务多，最好后台执行
-    # 这里为了简单反馈，我们使用后台任务
-    from fastapi import BackgroundTasks
-    # 但是 router 函数签名没加 BackgroundTasks
-    # 我们直接 await 吧，反正模拟只有 2s
-    await service.execute_account_tasks(account_id)
-    return {"message": "Execution started"}
+    asyncio.create_task(service.execute_account_tasks(account_id))
+    return {"message": "Task triggered", "account_id": account_id}
 
 @router.post("/tasks/{account_id}/run-action")
 async def run_action(account_id: int, payload: RunActionPayload):

@@ -135,6 +135,8 @@ class FBAccount(FBAccountBase):
     is_deleted: bool
     proxy_id: Optional[int] = None
     browser_window_id: Optional[int] = None
+    health_score: Optional[int] = None
+    health_grade: Optional[str] = None
     
     # 嵌套对象，方便前端展示
     proxy: Optional[ProxyIP] = None

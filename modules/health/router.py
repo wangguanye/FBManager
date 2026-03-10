@@ -16,6 +16,10 @@ async def list_health_scores(
     scores = await service.get_health_scores(db, grade=grade, sort=sort)
     return scores
 
+@router.get("/health/overview", response_model=schemas.HealthOverviewOut)
+async def get_health_overview(db: AsyncSession = Depends(get_db)):
+    return await service.get_health_overview(db)
+
 @router.get("/health/scores/{account_id}", response_model=schemas.HealthScoreOut)
 async def get_health_score_detail(
     account_id: int = Path(..., description="FB Account ID"),

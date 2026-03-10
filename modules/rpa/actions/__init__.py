@@ -15,3 +15,6 @@ from modules.rpa.actions.visit_profile import VisitProfileAction
 from modules.rpa.actions.share_post import SharePostAction
 from modules.rpa.actions.create_campaign import CreateCampaignAction
 from modules.rpa.actions.adjust_budget import AdjustBudgetAction
+from modules.rpa.base import discover_actions
+
+discover_actions()

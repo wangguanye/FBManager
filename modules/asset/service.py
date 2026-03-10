@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func, desc
 from sqlalchemy.orm import selectinload
 from modules.asset.models import FBAccount, ProxyIP, BrowserWindow, CommentPool, AvatarAsset
+from modules.health.models import HealthScore
 from modules.asset.schemas import FBAccountCreate, FBAccountUpdate, FBAccountBind, ProxyIPCreate, ProxyIPUpdate, BrowserWindowCreate, CommentCreate
 from modules.ad.models import BMAccount, AdAccount, Fanpage
 from core.crypto import encrypt_value
@@ -58,7 +59,19 @@ async def get_fb_accounts(
         
     stmt = stmt.offset(skip).limit(limit).order_by(FBAccount.created_at.desc())
     result = await db.execute(stmt)
-    return result.scalars().all()
+    accounts = result.scalars().all()
+    if not accounts:
+        return accounts
+    account_ids = [item.id for item in accounts]
+    score_stmt = select(HealthScore).where(HealthScore.fb_account_id.in_(account_ids))
+    score_result = await db.execute(score_stmt)
+    score_items = score_result.scalars().all()
+    score_map = {item.fb_account_id: item for item in score_items}
+    for account in accounts:
+        score_item = score_map.get(account.id)
+        account.health_score = score_item.score if score_item else 0
+        account.health_grade = score_item.grade if score_item else "F"
+    return accounts
 
 async def get_fb_account_by_id(db: AsyncSession, account_id: int):
     stmt = select(FBAccount).where(FBAccount.id == account_id, FBAccount.is_deleted == False)
@@ -117,12 +130,17 @@ async def update_fb_account(db: AsyncSession, account_id: int, update_data: FBAc
     warning_message = None
 
     if update_data.status and update_data.status != account.status:
-        if update_data.status == "banned":
+        if update_data.status in ["已封禁", "banned"]:
             warning_message = "账号将被封禁并触发级联禁用代理与窗口"
             await cascade_on_ban(db, account_id)
         elif previous_status in ["abnormal", "异常", "banned", "已封禁"] and update_data.status in ["nurturing", "养号中"]:
             await cascade_on_recovery(db, account_id)
-        account.status = update_data.status
+        if update_data.status in ["已封禁", "banned"]:
+            account.status = "已封禁"
+        elif update_data.status in ["养号中", "nurturing"]:
+            account.status = "养号中"
+        else:
+            account.status = update_data.status
 
     if update_data.username is not None:
         account.username = update_data.username
@@ -365,7 +383,9 @@ async def open_browser_window(db: AsyncSession, window_id: int):
     client = BitBrowserClient()
     try:
         res = await client.open_browser(window.bit_window_id)
-        # 可以在这里更新窗口状态，比如 "运行中"
+        window.status = "运行中"
+        db.add(window)
+        await db.flush()
         return res
     except BitBrowserNotRunningError:
         raise HTTPException(status_code=503, detail="BitBrowser is not running")
@@ -381,6 +401,15 @@ async def close_browser_window(db: AsyncSession, window_id: int):
     client = BitBrowserClient()
     try:
         await client.close_browser(window.bit_window_id)
+        previous_status = window.status
+        if previous_status == "使用中":
+            window.status = "使用中"
+        elif previous_status == "运行中":
+            window.status = "使用中" if window.fb_account else "空闲"
+        else:
+            window.status = "空闲"
+        db.add(window)
+        await db.flush()
         return True
     except BitBrowserNotRunningError:
         raise HTTPException(status_code=503, detail="BitBrowser is not running")

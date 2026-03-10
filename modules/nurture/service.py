@@ -100,6 +100,8 @@ async def generate_daily_tasks(db: AsyncSession):
     now_utc = datetime.utcnow()
     
     # 活跃窗口配置
+    silent_start_hour = int(sched_config.get("silent_hours_start", 2))
+    silent_end_hour = int(sched_config.get("silent_hours_end", 5))
     active_start_hour = sched_config.get("active_window_start", 8)
     active_end_hour = sched_config.get("active_window_end", 22)
     
@@ -207,6 +209,9 @@ async def generate_daily_tasks(db: AsyncSession):
                 tz = pytz.timezone("America/New_York")
             
             now_target = datetime.now(tz)
+            if silent_start_hour <= now_target.hour < silent_end_hour:
+                logger.info(f"账号 {account.username} 目标时区 {tz} 当前处于凌晨静默期，跳过")
+                continue
             target_date = now_target.date()
             
             start_dt_target = tz.localize(datetime.combine(target_date, time(active_start_hour, 0)))
@@ -221,6 +226,9 @@ async def generate_daily_tasks(db: AsyncSession):
             
             total_window_seconds = (end_dt_local - start_dt_local).total_seconds()
             if total_window_seconds <= 0:
+                if silent_start_hour <= now_target.hour < silent_end_hour:
+                    logger.info(f"账号 {account.username} 目标时区 {tz} 当前处于凌晨静默期，跳过")
+                    continue
                 start_dt_local = datetime.now(server_tz) + timedelta(hours=1)
                 total_window_seconds = 3600
 

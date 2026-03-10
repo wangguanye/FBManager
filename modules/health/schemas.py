@@ -11,3 +11,8 @@ class HealthScoreOut(BaseModel):
     calculated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class HealthOverviewOut(BaseModel):
+    average_score: int
+    total: int
+    grade_counts: Dict[str, int]

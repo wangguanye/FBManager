@@ -10,7 +10,7 @@ async def cascade_on_ban(db: AsyncSession, account_id: int) -> dict:
     if not account:
         return {"proxy_disabled": False, "window_disabled": False}
 
-    account.status = "banned"
+    account.status = "已封禁"
     db.add(account)
 
     proxy_disabled = False
@@ -21,7 +21,7 @@ async def cascade_on_ban(db: AsyncSession, account_id: int) -> dict:
     if account.proxy_id:
         proxy = await db.get(ProxyIP, account.proxy_id)
         if proxy:
-            proxy.status = "permanently_disabled"
+            proxy.status = "永久禁用"
             proxy_disabled = True
             proxy_host = proxy.host or "-"
             db.add(proxy)
@@ -29,7 +29,7 @@ async def cascade_on_ban(db: AsyncSession, account_id: int) -> dict:
     if account.browser_window_id:
         window = await db.get(BrowserWindow, account.browser_window_id)
         if window:
-            window.status = "permanently_disabled"
+            window.status = "永久禁用"
             window_disabled = True
             window_name = window.name or "-"
             db.add(window)
@@ -68,7 +68,7 @@ async def cascade_on_recovery(db: AsyncSession, account_id: int):
     if not account:
         return
 
-    account.status = "nurturing"
+    account.status = "养号中"
     db.add(account)
 
     proxy_host = "-"
@@ -77,14 +77,14 @@ async def cascade_on_recovery(db: AsyncSession, account_id: int):
     if account.proxy_id:
         proxy = await db.get(ProxyIP, account.proxy_id)
         if proxy:
-            proxy.status = "in_use"
+            proxy.status = "使用中"
             proxy_host = proxy.host or "-"
             db.add(proxy)
 
     if account.browser_window_id:
         window = await db.get(BrowserWindow, account.browser_window_id)
         if window:
-            window.status = "in_use"
+            window.status = "使用中"
             window_name = window.name or "-"
             db.add(window)
 

@@ -559,6 +559,7 @@
             healthScoresMap: {},
             healthRadarChart: null,
             detailLoading: false,
+            healthScoreThresholds: { good: 80, warn: 60 },
             bmCandidates: [],
             bmBindMode: 'select',
             selectedBmId: '',
@@ -826,15 +827,10 @@
             },
 
             getHealthBadgeClass(account) {
-                const grade = this.getHealthGradeValue(account)
-                const map = {
-                    A: 'bg-green-600 text-white',
-                    B: 'bg-blue-600 text-white',
-                    C: 'bg-yellow-500 text-white',
-                    D: 'bg-orange-500 text-white',
-                    F: 'bg-red-600 text-white'
-                }
-                return map[grade] || 'bg-gray-400 text-white'
+                const score = Number(this.getHealthScoreValue(account) || 0)
+                if (score >= this.healthScoreThresholds.good) return 'bg-green-600 text-white'
+                if (score >= this.healthScoreThresholds.warn) return 'bg-yellow-500 text-white'
+                return 'bg-red-600 text-white'
             },
 
             async openDetailPanel(account) {

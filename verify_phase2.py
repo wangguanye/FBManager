@@ -247,14 +247,14 @@ async def test_cascade_ban():
     CASCADE_CONTEXT["proxy_id"] = proxy_id
     CASCADE_CONTEXT["window_id"] = window_id
 
-    resp_ban = await http_json("PATCH", f"/api/accounts/{account_id}", json_data={"status": "banned"})
+    resp_ban = await http_json("PATCH", f"/api/accounts/{account_id}", json_data={"status": "已封禁"})
     assert_status(resp_ban, 200)
 
     async with AsyncSessionLocal() as db:
         proxy = await db.get(ProxyIP, proxy_id)
         window = await db.get(BrowserWindow, window_id)
-        assert proxy and proxy.status == "permanently_disabled"
-        assert window and window.status == "permanently_disabled"
+        assert proxy and proxy.status == "永久禁用"
+        assert window and window.status == "永久禁用"
 
 async def test_cascade_recovery():
     account_id = CASCADE_CONTEXT.get("account_id")
@@ -262,14 +262,14 @@ async def test_cascade_recovery():
     window_id = CASCADE_CONTEXT.get("window_id")
     if not account_id or not proxy_id or not window_id:
         raise RuntimeError("级联封禁未成功，缺少上下文")
-    resp_recover = await http_json("PATCH", f"/api/accounts/{account_id}", json_data={"status": "nurturing"})
+    resp_recover = await http_json("PATCH", f"/api/accounts/{account_id}", json_data={"status": "养号中"})
     assert_status(resp_recover, 200)
 
     async with AsyncSessionLocal() as db:
         proxy = await db.get(ProxyIP, proxy_id)
         window = await db.get(BrowserWindow, window_id)
-        assert proxy and proxy.status == "in_use"
-        assert window and window.status == "in_use"
+        assert proxy and proxy.status == "使用中"
+        assert window and window.status == "使用中"
 
 async def test_alert_crud():
     require_table("alerts")

@@ -186,6 +186,17 @@ async def get_health_scores(db: AsyncSession, grade: Optional[str] = None, sort:
     items = result.scalars().all()
     return [serialize_health_score(item) for item in items]
 
+async def get_health_overview(db: AsyncSession) -> Dict[str, Any]:
+    assert db is not None
+    avg_stmt = select(func.avg(HealthScore.score), func.count(HealthScore.id))
+    avg_result = await db.execute(avg_stmt)
+    avg_score, total = avg_result.one()
+    average_score = int(round(avg_score or 0))
+    grade_stmt = select(HealthScore.grade, func.count(HealthScore.id)).group_by(HealthScore.grade)
+    grade_result = await db.execute(grade_stmt)
+    grade_counts = {row[0]: row[1] for row in grade_result.all() if row[0]}
+    return {"average_score": average_score, "total": int(total or 0), "grade_counts": grade_counts}
+
 async def get_health_score_detail(db: AsyncSession, account_id: int) -> Optional[Dict[str, Any]]:
     assert db is not None
     assert account_id is not None
