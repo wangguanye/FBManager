@@ -1,9 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict, Any
+from sqlalchemy import select, or_
+from sqlalchemy.orm import selectinload
+from datetime import datetime
+import csv
+import io
 from db.database import get_db
 from modules.asset import service, schemas
 from modules.rpa.browser_client import BitBrowserNotRunningError
+from modules.asset.models import FBAccount
 
 # 保持 API 统一前缀，这里不需要 /asset 前缀，因为 main.py 中已经挂载到 /api
 router = APIRouter(tags=["Asset"])
@@ -29,6 +36,61 @@ async def list_accounts(
 ):
     """账号列表，支持筛选和搜索"""
     return await service.get_fb_accounts(db, skip, limit, status, q)
+
+@router.get("/accounts/{id}/ad-assets")
+async def get_account_ad_assets(id: int, db: AsyncSession = Depends(get_db)):
+    assets = await service.get_account_ad_assets(db, id)
+    if not assets:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return assets
+
+@router.get("/accounts/export")
+async def export_accounts(
+    status: Optional[str] = None,
+    q: Optional[str] = None,
+    format: str = "csv",
+    db: AsyncSession = Depends(get_db)
+):
+    if format != "csv":
+        raise HTTPException(status_code=400, detail="Unsupported format")
+    stmt = select(FBAccount).where(FBAccount.is_deleted == False).options(
+        selectinload(FBAccount.proxy),
+        selectinload(FBAccount.browser_window)
+    )
+    if status:
+        stmt = stmt.where(FBAccount.status == status)
+    if q:
+        stmt = stmt.where(or_(FBAccount.username.ilike(f"%{q}%"), FBAccount.notes.ilike(f"%{q}%")))
+    stmt = stmt.order_by(FBAccount.created_at.desc())
+    result = await db.execute(stmt)
+    accounts = result.scalars().all()
+    output = io.StringIO()
+    output.write("\ufeff")
+    writer = csv.writer(output)
+    writer.writerow(["用户名", "邮箱", "地区", "状态", "养号天数", "绑定代理", "绑定窗口", "创建时间", "最后活跃"])
+    for account in accounts:
+        proxy_label = f"{account.proxy.host}:{account.proxy.port}" if account.proxy else ""
+        window_label = account.browser_window.name if account.browser_window else ""
+        created_at = account.created_at.strftime("%Y-%m-%d %H:%M:%S") if account.created_at else ""
+        last_active = account.last_active_at.strftime("%Y-%m-%d %H:%M:%S") if account.last_active_at else ""
+        writer.writerow([
+            account.username or "",
+            account.email or "",
+            account.region or "",
+            account.status or "",
+            account.nurture_day or 0,
+            proxy_label,
+            window_label,
+            created_at,
+            last_active
+        ])
+    output.seek(0)
+    filename = f"accounts_{datetime.now().strftime('%Y%m%d')}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 @router.patch("/accounts/{id}", response_model=Dict[str, Any])
 async def update_account(

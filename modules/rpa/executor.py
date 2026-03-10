@@ -38,6 +38,20 @@ class RPAExecutor:
         except Exception:
             return 5
 
+    @classmethod
+    def set_max_concurrent(cls, value: int) -> int:
+        assert value is not None
+        value = int(value)
+        if value < 1 or value > 10:
+            raise ValueError("max_concurrent_out_of_range")
+        cls._semaphore = asyncio.Semaphore(value)
+        cls._max_concurrent = value
+        return value
+
+    @classmethod
+    def get_max_concurrent(cls) -> int:
+        return int(getattr(cls, "_max_concurrent", 0) or 0)
+
     async def run_task(self, account, task, actions: List[Dict]):
         """
         Execute a list of actions for an account.

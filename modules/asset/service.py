@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, and_, func
+from sqlalchemy import select, or_, and_, func, desc
 from sqlalchemy.orm import selectinload
 from modules.asset.models import FBAccount, ProxyIP, BrowserWindow, CommentPool, AvatarAsset
 from modules.asset.schemas import FBAccountCreate, FBAccountUpdate, FBAccountBind, ProxyIPCreate, ProxyIPUpdate, BrowserWindowCreate, CommentCreate
+from modules.ad.models import BMAccount, AdAccount, Fanpage
 from core.crypto import encrypt_value
 from core.cascade import cascade_on_ban, cascade_on_recovery
 from fastapi import HTTPException
@@ -60,6 +61,49 @@ async def get_fb_account_by_id(db: AsyncSession, account_id: int):
     stmt = select(FBAccount).where(FBAccount.id == account_id, FBAccount.is_deleted == False)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+async def get_account_ad_assets(db: AsyncSession, account_id: int):
+    assert account_id > 0
+    account = await get_fb_account_by_id(db, account_id)
+    if not account:
+        return None
+    bm_stmt = select(BMAccount).where(BMAccount.fb_account_id == account_id).order_by(desc(BMAccount.created_at)).limit(1)
+    bm_result = await db.execute(bm_stmt)
+    bm = bm_result.scalar_one_or_none()
+    ad_accounts = []
+    if bm:
+        ad_account_stmt = select(AdAccount).where(AdAccount.bm_id == bm.id).order_by(desc(AdAccount.created_at))
+        ad_account_result = await db.execute(ad_account_stmt)
+        ad_accounts = ad_account_result.scalars().all()
+    fanpage_stmt = select(Fanpage).where(Fanpage.fb_account_id == account_id).order_by(desc(Fanpage.created_at))
+    fanpage_result = await db.execute(fanpage_stmt)
+    fanpages = fanpage_result.scalars().all()
+    bm_payload = None
+    if bm:
+        bm_payload = {"bm_id": bm.bm_id, "name": bm.name, "status": bm.status}
+    ad_accounts_payload = [
+        {
+            "ad_account_id": item.ad_account_id,
+            "spending_limit": item.spending_limit,
+            "daily_budget": item.daily_budget,
+            "status": item.status
+        }
+        for item in ad_accounts
+    ]
+    fanpages_payload = [
+        {
+            "page_id": item.page_id,
+            "page_name": item.page_name,
+            "pixel_installed": item.pixel_installed,
+            "domain_verified": item.domain_verified
+        }
+        for item in fanpages
+    ]
+    return {
+        "bm": bm_payload,
+        "ad_accounts": ad_accounts_payload,
+        "fanpages": fanpages_payload
+    }
 
 async def update_fb_account(db: AsyncSession, account_id: int, update_data: FBAccountUpdate):
     account = await get_fb_account_by_id(db, account_id)

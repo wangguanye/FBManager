@@ -38,7 +38,7 @@
             </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow p-6 flex items-center justify-between">
+        <div class="bg-white rounded-lg shadow p-6 flex items-center justify-between cursor-pointer hover:shadow-md transition" @click="openQueueModal()">
             <div>
                 <h3 class="text-gray-500 text-sm font-medium">活跃 RPA 进程</h3>
                 <div class="mt-2 text-3xl font-bold text-blue-600">
@@ -65,6 +65,85 @@
                 <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                 </svg>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showQueueModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showQueueModal = false"></div>
+            <div class="inline-block w-full max-w-3xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium leading-6 text-gray-900">RPA 队列状态</h3>
+                    <button class="text-gray-500 hover:text-gray-700" @click="showQueueModal = false">关闭</button>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="space-y-3">
+                        <h4 class="text-sm font-semibold text-gray-900">运行中任务</h4>
+                        <template x-for="item in queueStatus.running" :key="`${item.account}-${item.task}`">
+                            <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                                <div class="text-gray-800" x-text="item.account"></div>
+                                <div class="text-gray-500" x-text="item.task"></div>
+                                <div class="text-gray-500" x-text="getRunningDuration(item)"></div>
+                            </div>
+                        </template>
+                        <div x-show="queueStatus.running.length === 0" class="text-sm text-gray-500">暂无运行任务</div>
+                    </div>
+                    <div class="space-y-3">
+                        <h4 class="text-sm font-semibold text-gray-900">排队中任务</h4>
+                        <template x-for="item in queueStatus.queued" :key="`${item.account}-${item.priority}`">
+                            <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                                <div class="text-gray-800" x-text="item.account"></div>
+                                <div class="text-gray-500" x-text="`优先级 ${item.priority}`"></div>
+                                <div class="text-gray-500" x-text="formatDate(item.estimated_start)"></div>
+                            </div>
+                        </template>
+                        <div x-show="queueStatus.queued.length === 0" class="text-sm text-gray-500">暂无排队任务</div>
+                    </div>
+                </div>
+                <div class="mt-6 border-t border-gray-200 pt-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="text-sm text-gray-700">最大并发数：<span class="font-medium" x-text="maxConcurrentInput"></span></div>
+                        <div class="text-xs text-gray-400">当前并发 <span x-text="queueStatus.current_concurrent"></span></div>
+                    </div>
+                    <input type="range" min="1" max="10" step="1" x-model.number="maxConcurrentInput" class="w-full">
+                    <div class="flex justify-end mt-4">
+                        <button class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700" @click="applyMaxConcurrent()">应用</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-medium text-gray-900">投放概览</h3>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-gray-50 rounded-lg p-4">
+                <div class="text-sm text-gray-500">今日总消耗</div>
+                <div class="mt-2 text-2xl font-bold text-gray-900" x-text="formatCurrency(adOverview.today_spend)"></div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4">
+                <div class="text-sm text-gray-500">本周总消耗</div>
+                <div class="mt-2 text-2xl font-bold text-gray-900" x-text="formatCurrency(adOverview.week_spend)"></div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4">
+                <div class="text-sm text-gray-500">本月总消耗</div>
+                <div class="mt-2 text-2xl font-bold text-gray-900" x-text="formatCurrency(adOverview.month_spend)"></div>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4">
+                <div class="text-sm text-gray-500">平均 CPP</div>
+                <div class="mt-2 text-2xl font-bold text-gray-900" x-text="formatCurrency(adOverview.avg_cpp)"></div>
+            </div>
+        </div>
+        <div class="bg-gray-50 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+                <h4 class="text-sm font-semibold text-gray-900">近 14 天消耗趋势</h4>
+            </div>
+            <div x-show="adOverview.daily_trend.length === 0" class="text-sm text-gray-500 text-center py-10">暂无投放数据</div>
+            <div x-show="adOverview.daily_trend.length > 0" class="h-64">
+                <canvas id="adOverviewChart" class="w-full h-64"></canvas>
             </div>
         </div>
     </div>
@@ -189,6 +268,7 @@
      </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 function dashboard() {
     return {
@@ -201,10 +281,15 @@ function dashboard() {
         alerts: [],
         todayTasks: [], 
         schedulerStatus: { running: false, paused: false, next_run_generate: null, max_concurrent_windows: 0 },
+        queueStatus: { running: [], queued: [], max_concurrent: 0, current_concurrent: 0 },
         alertCounts: { total: 0, error: 0, critical: 0 },
         lastAlertId: null,
         expandedAlertId: null,
         dismissedAlertIds: new Set(),
+        adOverview: { today_spend: 0, week_spend: 0, month_spend: 0, avg_cpp: 0, daily_trend: [] },
+        adOverviewChart: null,
+        showQueueModal: false,
+        maxConcurrentInput: 1,
         accountStatusConfig: [
             { key: '待养号', label: '待养号', color: 'text-blue-600' },
             { key: '养号中', label: '养号中', color: 'text-yellow-600' },
@@ -227,14 +312,18 @@ function dashboard() {
         
         fetchAll() {
             this.fetchStats();
+            this.fetchAdOverview();
             this.fetchAlertCounts();
             this.fetchSchedulerStatus();
+            this.fetchSchedulerQueue();
             this.fetchAlerts();
             this.fetchTodayTasks();
         },
         fetchRealtime() {
+            this.fetchAdOverview();
             this.fetchAlertCounts();
             this.fetchSchedulerStatus();
+            this.fetchSchedulerQueue();
             this.fetchAlerts();
             this.fetchTodayTasks();
         },
@@ -267,6 +356,17 @@ function dashboard() {
                 if (res.ok) this.schedulerStatus = await res.json();
             } catch (e) { console.error(e); }
         },
+        async fetchSchedulerQueue() {
+            try {
+                const res = await fetch('/api/scheduler/queue');
+                if (res.ok) {
+                    this.queueStatus = await res.json();
+                    if (!this.maxConcurrentInput || this.maxConcurrentInput < 1) {
+                        this.maxConcurrentInput = this.queueStatus.max_concurrent || this.schedulerStatus.max_concurrent_windows || 1;
+                    }
+                }
+            } catch (e) { console.error(e); }
+        },
         async fetchTodayTasks() {
             try {
                 const params = new URLSearchParams({ date: this.getTodayDate() });
@@ -274,6 +374,15 @@ function dashboard() {
                 if (res.ok) {
                     this.todayTasks = await res.json();
                     this.showManualTimeoutToast();
+                }
+            } catch (e) { console.error(e); }
+        },
+        async fetchAdOverview() {
+            try {
+                const res = await fetch('/api/ad-overview');
+                if (res.ok) {
+                    this.adOverview = await res.json();
+                    this.renderAdOverviewChart();
                 }
             } catch (e) { console.error(e); }
         },
@@ -373,10 +482,85 @@ function dashboard() {
             const day = `${now.getDate()}`.padStart(2, '0');
             return `${year}-${month}-${day}`;
         },
+        formatCurrency(cents) {
+            const value = Number(cents || 0) / 100;
+            return `$${value.toFixed(2)}`;
+        },
         formatDate(dateStr) {
             if (!dateStr) return '-';
             const date = new Date(dateStr);
             return date.toLocaleString('zh-CN', { hour12: false });
+        },
+        getRunningDuration(item) {
+            if (!item || !item.started_at) return '-';
+            const startedAt = new Date(item.started_at);
+            const diffMs = Date.now() - startedAt.getTime();
+            if (diffMs <= 0) return '0m';
+            const totalMinutes = Math.floor(diffMs / 60000);
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
+            if (hours > 0) return `${hours}h${minutes}m`;
+            return `${minutes}m`;
+        },
+        openQueueModal() {
+            this.showQueueModal = true;
+            this.fetchSchedulerQueue();
+        },
+        async applyMaxConcurrent() {
+            const value = Number(this.maxConcurrentInput || 0);
+            if (value < 1 || value > 10) {
+                showToast('并发数范围为 1-10', 'warn');
+                return;
+            }
+            try {
+                const res = await fetch('/api/scheduler/max-concurrent', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value })
+                });
+                if (!res.ok) throw new Error('设置失败');
+                await this.fetchSchedulerQueue();
+                await this.fetchSchedulerStatus();
+                showToast('并发数已更新', 'info');
+            } catch (e) {
+                showToast(e.message || '设置失败', 'error');
+            }
+        },
+        renderAdOverviewChart() {
+            const data = this.adOverview.daily_trend || [];
+            if (!document.getElementById('adOverviewChart')) return;
+            if (data.length === 0) {
+                if (this.adOverviewChart) {
+                    this.adOverviewChart.destroy();
+                    this.adOverviewChart = null;
+                }
+                return;
+            }
+            const labels = data.map(item => item.date);
+            const spendData = data.map(item => Number(item.spend || 0) / 100);
+            if (this.adOverviewChart) this.adOverviewChart.destroy();
+            const ctx = document.getElementById('adOverviewChart');
+            this.adOverviewChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: '消耗($)',
+                        data: spendData,
+                        borderColor: '#4f46e5',
+                        backgroundColor: 'rgba(79,70,229,0.12)',
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
         },
 
         async backupSystem() {

@@ -98,11 +98,42 @@
             <header class="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
                 <h1 class="text-xl font-semibold text-gray-800">{{ title }}</h1>
                 <div class="flex items-center space-x-4">
-                    <button class="p-2 text-gray-400 hover:text-indigo-600 focus:outline-none">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
-                        </svg>
-                    </button>
+                    <div x-data="alertCenter()" x-init="init()" class="relative flex items-center gap-2">
+                        <button @click="toggleDropdown" class="relative p-2 text-gray-400 hover:text-indigo-600 focus:outline-none">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                            </svg>
+                            <span x-show="counts.total > 0" x-text="counts.total"
+                                  class="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-red-600 text-white text-xs flex items-center justify-center"></span>
+                        </button>
+                        <button @click="toggleMute" class="text-lg leading-none" x-text="isMuted ? '🔇' : '🔔'"></button>
+                        <div x-show="isOpen" x-transition.opacity.duration.200ms @click.away="isOpen = false"
+                             class="absolute right-0 top-10 w-[420px] bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+                            <div class="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-800">未处理告警</div>
+                            <div class="max-h-96 overflow-y-auto">
+                                <template x-for="item in alerts" :key="item.id">
+                                    <div class="px-4 py-3 border-b border-gray-100 flex gap-3 text-sm">
+                                        <div>
+                                            <span class="px-2 py-0.5 rounded-full text-xs font-semibold"
+                                                  :class="getLevelClass(item.level)" x-text="item.level"></span>
+                                        </div>
+                                        <div class="flex-1">
+                                            <div class="text-gray-600 text-xs" x-text="formatDateTime(item.created_at)"></div>
+                                            <div class="text-gray-900 font-medium" x-text="item.title"></div>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <button @click="viewAlert(item)" class="text-indigo-600 hover:text-indigo-900 text-xs">查看</button>
+                                            <button @click="dismissAlert(item)" class="text-gray-500 hover:text-gray-800 text-xs">关闭</button>
+                                        </div>
+                                    </div>
+                                </template>
+                                <div x-show="alerts.length === 0" class="px-4 py-8 text-sm text-gray-500 text-center">暂无未处理告警</div>
+                            </div>
+                            <div class="px-4 py-3 border-t border-gray-100 text-sm">
+                                <a href="/logs?level=ERROR" class="text-indigo-600 hover:text-indigo-800">查看全部告警 →</a>
+                            </div>
+                        </div>
+                    </div>
                     <div class="h-8 w-px bg-gray-200"></div>
                     <span class="text-sm text-gray-600">v1.0.0</span>
                 </div>
@@ -130,6 +161,8 @@
              x-text="$store.toast.message">
         </div>
     </div>
+    <div id="critical-flash" class="fixed inset-0 bg-red-600 opacity-0 pointer-events-none transition-opacity duration-200"></div>
+    <audio id="alert-audio" preload="auto" class="hidden" src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA="></audio>
     <script>
         document.addEventListener('alpine:init', () => {
             Alpine.store('toast', {
@@ -148,6 +181,120 @@
                 }
             })
         })
+        function alertCenter() {
+            return {
+                isOpen: false,
+                isMuted: false,
+                counts: { total: 0, error: 0, critical: 0 },
+                alerts: [],
+                lastCounts: { error: 0, critical: 0 },
+                hasPolled: false,
+                audioContext: null,
+                init() {
+                    this.isMuted = localStorage.getItem('alertMuted') === '1'
+                    this.fetchCounts()
+                    setInterval(() => this.fetchCounts(), 30000)
+                },
+                toggleDropdown() {
+                    this.isOpen = !this.isOpen
+                    if (this.isOpen) this.fetchAlerts()
+                },
+                toggleMute() {
+                    this.isMuted = !this.isMuted
+                    localStorage.setItem('alertMuted', this.isMuted ? '1' : '0')
+                },
+                async fetchCounts() {
+                    try {
+                        const res = await fetch('/api/alerts/count')
+                        if (!res.ok) return
+                        const data = await res.json()
+                        if (!this.hasPolled) {
+                            this.counts = data
+                            this.lastCounts = { error: data.error || 0, critical: data.critical || 0 }
+                            this.hasPolled = true
+                            return
+                        }
+                        this.handleSoundAndFlash(data)
+                        this.counts = data
+                        this.lastCounts = { error: data.error || 0, critical: data.critical || 0 }
+                    } catch (e) {}
+                },
+                async fetchAlerts() {
+                    try {
+                        const res = await fetch('/api/alerts')
+                        if (!res.ok) return
+                        const data = await res.json()
+                        this.alerts = data.slice(0, 10)
+                    } catch (e) {}
+                },
+                async dismissAlert(item) {
+                    try {
+                        const res = await fetch(`/api/alerts/${item.id}/dismiss`, { method: 'POST' })
+                        if (!res.ok) return
+                        this.alerts = this.alerts.filter(alert => alert.id !== item.id)
+                        this.fetchCounts()
+                    } catch (e) {}
+                },
+                viewAlert(item) {
+                    if (item.fb_account_id) {
+                        window.location.href = `/accounts?account_id=${item.fb_account_id}`
+                        return
+                    }
+                    window.location.href = '/accounts'
+                },
+                getLevelClass(level) {
+                    if (level === 'CRITICAL') return 'bg-red-100 text-red-800'
+                    if (level === 'ERROR') return 'bg-red-50 text-red-700'
+                    if (level === 'WARN') return 'bg-yellow-100 text-yellow-800'
+                    return 'bg-blue-100 text-blue-800'
+                },
+                formatDateTime(dateValue) {
+                    if (!dateValue) return '-'
+                    const date = new Date(dateValue)
+                    if (Number.isNaN(date.getTime())) return dateValue
+                    return date.toLocaleString()
+                },
+                handleSoundAndFlash(data) {
+                    const criticalNow = data.critical || 0
+                    const errorNow = data.error || 0
+                    if (criticalNow > 0 && this.lastCounts.critical === 0) {
+                        this.triggerCriticalFlash()
+                        this.playTone(880, 0.18, 0.2)
+                        return
+                    }
+                    if (errorNow > this.lastCounts.error) {
+                        this.playTone(520, 0.12, 0.12)
+                    }
+                },
+                triggerCriticalFlash() {
+                    const flash = document.getElementById('critical-flash')
+                    if (!flash) return
+                    flash.classList.remove('opacity-0')
+                    flash.classList.add('opacity-70')
+                    setTimeout(() => {
+                        flash.classList.remove('opacity-70')
+                        flash.classList.add('opacity-0')
+                    }, 500)
+                },
+                playTone(frequency, duration, volume) {
+                    if (this.isMuted) return
+                    try {
+                        if (!this.audioContext) {
+                            this.audioContext = new (window.AudioContext || window.webkitAudioContext)()
+                        }
+                        const oscillator = this.audioContext.createOscillator()
+                        const gainNode = this.audioContext.createGain()
+                        oscillator.type = 'sine'
+                        oscillator.frequency.value = frequency
+                        gainNode.gain.value = volume
+                        oscillator.connect(gainNode)
+                        gainNode.connect(this.audioContext.destination)
+                        oscillator.start()
+                        oscillator.stop(this.audioContext.currentTime + duration)
+                    } catch (e) {}
+                }
+            }
+        }
         window.showToast = (message, type = 'info') => {
             if (window.Alpine && Alpine.store('toast')) {
                 Alpine.store('toast').show(message, type)

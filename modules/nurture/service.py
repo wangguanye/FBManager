@@ -32,6 +32,43 @@ async def get_manual_timeout_config():
         logger.error(f"Failed to load manual timeout config: {e}")
         return {}
 
+PRIORITY_STATUS_SCORE = 100
+PRIORITY_MANUAL_OVERDUE_SCORE = 50
+PRIORITY_NURTURE_DAY_7_SCORE = 30
+PRIORITY_NURTURE_DAY_14_SCORE = 20
+PRIORITY_INACTIVE_24H_SCORE = 40
+PRIORITY_INACTIVE_12H_SCORE = 20
+PRIORITY_INACTIVE_DEFAULT_HOURS = 9999
+MIN_SCHEDULE_GAP_MINUTES = 5
+MAX_SCHEDULE_GAP_MINUTES = 15
+MIN_START_DELAY_MINUTES = 5
+ACCOUNT_TASK_SPREAD_MINUTES = 30
+
+def calculate_priority(account: FBAccount, has_overdue_manual: bool, now_utc: datetime) -> int:
+    assert account is not None
+    assert now_utc is not None
+    score = 0
+    if account.status == "投放养号中":
+        score += PRIORITY_STATUS_SCORE
+    if has_overdue_manual:
+        score += PRIORITY_MANUAL_OVERDUE_SCORE
+    nurture_day = account.nurture_day or 0
+    if nurture_day <= 7:
+        score += PRIORITY_NURTURE_DAY_7_SCORE
+    elif nurture_day <= 14:
+        score += PRIORITY_NURTURE_DAY_14_SCORE
+    last_active_at = account.last_active_at
+    if last_active_at and last_active_at.tzinfo:
+        last_active_at = last_active_at.replace(tzinfo=None)
+    hours_since_active = PRIORITY_INACTIVE_DEFAULT_HOURS
+    if last_active_at:
+        hours_since_active = (now_utc - last_active_at).total_seconds() / 3600
+    if hours_since_active > 24:
+        score += PRIORITY_INACTIVE_24H_SCORE
+    elif hours_since_active > 12:
+        score += PRIORITY_INACTIVE_12H_SCORE
+    return score
+
 async def generate_daily_tasks(db: AsyncSession):
     """
     生成每日养号任务
@@ -49,6 +86,18 @@ async def generate_daily_tasks(db: AsyncSession):
     sched_config = await get_scheduler_config()
     manual_timeout_config = await get_manual_timeout_config()
     block_hours = manual_timeout_config.get("block_hours", 72)
+    warn_hours = manual_timeout_config.get("warn_hours", 24)
+    overdue_threshold = datetime.utcnow() - timedelta(hours=warn_hours)
+    stmt_overdue = select(NurtureTask.fb_account_id).where(
+        and_(
+            NurtureTask.task_type == "manual",
+            NurtureTask.status == "pending",
+            NurtureTask.created_at <= overdue_threshold
+        )
+    ).group_by(NurtureTask.fb_account_id)
+    result_overdue = await db.execute(stmt_overdue)
+    overdue_account_ids = set(result_overdue.scalars().all())
+    now_utc = datetime.utcnow()
     
     # 活跃窗口配置
     active_start_hour = sched_config.get("active_window_start", 8)
@@ -56,7 +105,13 @@ async def generate_daily_tasks(db: AsyncSession):
     
     tasks_created = 0
     
-    for account in accounts:
+    accounts_sorted = sorted(
+        accounts,
+        key=lambda account: calculate_priority(account, account.id in overdue_account_ids, now_utc),
+        reverse=True
+    )
+    last_scheduled_time = None
+    for account in accounts_sorted:
         if not account.nurture_start_date:
             account.nurture_start_date = today
 
@@ -162,16 +217,30 @@ async def generate_daily_tasks(db: AsyncSession):
             end_dt_local = end_dt_target.astimezone(server_tz)
             
             if start_dt_local < datetime.now(server_tz):
-                start_dt_local = datetime.now(server_tz) + timedelta(minutes=5)
+                start_dt_local = datetime.now(server_tz) + timedelta(minutes=MIN_START_DELAY_MINUTES)
             
             total_window_seconds = (end_dt_local - start_dt_local).total_seconds()
             if total_window_seconds <= 0:
                 start_dt_local = datetime.now(server_tz) + timedelta(hours=1)
                 total_window_seconds = 3600
 
+            gap_minutes = random.randint(MIN_SCHEDULE_GAP_MINUTES, MAX_SCHEDULE_GAP_MINUTES)
+            if last_scheduled_time and last_scheduled_time > start_dt_local:
+                base_time = last_scheduled_time + timedelta(minutes=gap_minutes)
+            else:
+                base_time = start_dt_local
+            if base_time > end_dt_local:
+                base_time = end_dt_local - timedelta(minutes=MIN_SCHEDULE_GAP_MINUTES)
+            if base_time < start_dt_local:
+                base_time = start_dt_local
+            last_scheduled_time = base_time
+            task_spread_seconds = ACCOUNT_TASK_SPREAD_MINUTES * 60
+
             for task_data in tasks_to_create:
-                random_seconds = random.randint(0, int(total_window_seconds))
-                scheduled_time = start_dt_local + timedelta(seconds=random_seconds)
+                random_seconds = random.randint(0, int(task_spread_seconds))
+                scheduled_time = base_time + timedelta(seconds=random_seconds)
+                if scheduled_time > end_dt_local:
+                    scheduled_time = end_dt_local - timedelta(seconds=30)
                 scheduled_time_naive = scheduled_time.replace(tzinfo=None)
 
                 db_task = NurtureTask(
@@ -262,6 +331,7 @@ async def check_and_execute_tasks():
     """
     sched_config = await get_scheduler_config()
     max_concurrent = sched_config.get("max_concurrent_windows", 5)
+    max_concurrent = max(max_concurrent, 1)
     
     async with AsyncSessionLocal() as db:
         # 1. 检查当前正在执行的任务数量
@@ -350,6 +420,102 @@ async def check_and_execute_tasks():
             # 异步启动执行
             # 注意：这里不 await，而是放飞异步任务
             asyncio.create_task(execute_account_tasks(account_id))
+
+async def get_scheduler_queue_status(db: AsyncSession):
+    now = datetime.utcnow()
+    stmt_running = select(NurtureTask, FBAccount).join(FBAccount, FBAccount.id == NurtureTask.fb_account_id).where(
+        and_(
+            NurtureTask.status == "running",
+            NurtureTask.execution_type == "auto"
+        )
+    )
+    result_running = await db.execute(stmt_running)
+    running_items = []
+    running_account_ids = set()
+    for task, account in result_running.all():
+        running_account_ids.add(account.id)
+        started_at = task.scheduled_time or task.created_at
+        running_items.append({
+            "account": account.username or str(account.id),
+            "task": task.action,
+            "started_at": started_at
+        })
+
+    stmt_pending = select(NurtureTask, FBAccount).join(FBAccount, FBAccount.id == NurtureTask.fb_account_id).where(
+        and_(
+            NurtureTask.status == "pending",
+            NurtureTask.execution_type == "auto"
+        )
+    )
+    result_pending = await db.execute(stmt_pending)
+    pending_map = {}
+    for task, account in result_pending.all():
+        if account.id in pending_map:
+            existing_time = pending_map[account.id]["scheduled_time"]
+            candidate_time = task.scheduled_time or task.created_at
+            if existing_time and candidate_time and candidate_time < existing_time:
+                pending_map[account.id] = {
+                    "account": account,
+                    "scheduled_time": candidate_time
+                }
+            continue
+        pending_map[account.id] = {
+            "account": account,
+            "scheduled_time": task.scheduled_time or task.created_at
+        }
+
+    manual_timeout_config = await get_manual_timeout_config()
+    warn_hours = manual_timeout_config.get("warn_hours", 24)
+    overdue_threshold = now - timedelta(hours=warn_hours)
+    stmt_overdue = select(NurtureTask.fb_account_id).where(
+        and_(
+            NurtureTask.task_type == "manual",
+            NurtureTask.status == "pending",
+            NurtureTask.created_at <= overdue_threshold
+        )
+    ).group_by(NurtureTask.fb_account_id)
+    result_overdue = await db.execute(stmt_overdue)
+    overdue_account_ids = set(result_overdue.scalars().all())
+
+    queued_items = []
+    for item in pending_map.values():
+        account = item["account"]
+        scheduled_time = item["scheduled_time"]
+        priority_score = calculate_priority(account, account.id in overdue_account_ids, now)
+        queued_items.append({
+            "account": account.username or str(account.id),
+            "priority": priority_score,
+            "estimated_start": scheduled_time
+        })
+    queued_items.sort(key=lambda item: item["priority"], reverse=True)
+
+    sched_config = await get_scheduler_config()
+    max_concurrent = max(int(sched_config.get("max_concurrent_windows", 5)), 1)
+    current_concurrent = len(running_account_ids)
+    return {
+        "running": running_items,
+        "queued": queued_items,
+        "max_concurrent": max_concurrent,
+        "current_concurrent": current_concurrent
+    }
+
+async def set_scheduler_max_concurrent(value: int) -> int:
+    assert value is not None
+    value = int(value)
+    if value < 1 or value > 10:
+        raise ValueError("max_concurrent_out_of_range")
+    try:
+        with open("config.yaml", "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+    except Exception:
+        config = {}
+    scheduler_config = config.get("scheduler", {})
+    scheduler_config["max_concurrent_windows"] = value
+    config["scheduler"] = scheduler_config
+    with open("config.yaml", "w", encoding="utf-8") as f:
+        yaml.safe_dump(config, f, allow_unicode=True, sort_keys=False)
+    RPAExecutor.set_max_concurrent(value)
+    return value
 
 async def get_tasks_for_date(db: AsyncSession, date_obj: date):
     """获取指定日期的任务列表"""

@@ -13,6 +13,9 @@
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                 批量导入
             </button>
+            <button @click="exportAccounts()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition flex items-center gap-2">
+                📥 导出 CSV
+            </button>
             <div class="relative">
                 <select x-model="statusFilter" @change="fetchAccounts()" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
                     <option value="">所有状态</option>
@@ -52,10 +55,10 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 <template x-for="account in accounts" :key="account.id">
-                    <tr :class="{'bg-red-50': account.status === '已封禁'}">
+                    <tr :class="{'bg-red-50': account.status === '已封禁'}" @click="openDetailPanel(account)" class="cursor-pointer">
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="relative" x-data="{ open: false }">
-                                <button @click="open = !open" class="flex items-center focus:outline-none">
+                                <button @click.stop="open = !open" class="flex items-center focus:outline-none">
                                     <span :class="getStatusColor(account.status)" class="w-3 h-3 rounded-full mr-2"></span>
                                     <span class="text-sm text-gray-900" x-text="account.status"></span>
                                     <svg x-show="account.status === '投放养号中'" class="w-4 h-4 text-yellow-500 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
@@ -63,8 +66,13 @@
                                 <!-- 状态下拉 -->
                                 <div x-show="open" @click.away="open = false" class="absolute z-10 mt-2 w-40 bg-white rounded-md shadow-lg py-1 border border-gray-100">
                                     <template x-for="status in ['待养号', '养号中', '养号就绪', '投放养号中', '异常', '已封禁']">
-                                        <a href="#" @click.prevent="updateStatus(account.id, status); open = false" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" x-text="status"></a>
+                                        <a href="#" @click.stop.prevent="updateStatus(account.id, status); open = false" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" x-text="status"></a>
                                     </template>
+                                </div>
+                                <div class="mt-1 text-xs">
+                                    <span x-show="isAdAssetsLoading(account)" class="text-gray-400">资产加载中</span>
+                                    <span x-show="isAdAssetsReady(account)" class="text-green-700 bg-green-100 px-2 py-0.5 rounded-full">✅ 投放就绪</span>
+                                    <span x-show="!isAdAssetsLoading(account) && !isAdAssetsReady(account)" class="text-yellow-800 bg-yellow-100 px-2 py-0.5 rounded-full" x-text="`⚠️ 缺少 ${getAdAssetsMissingLabel(account)}`"></span>
                                 </div>
                             </div>
                         </td>
@@ -88,13 +96,108 @@
                             <span x-text="formatDate(account.last_active_at)"></span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button @click="openBindModal(account)" class="text-indigo-600 hover:text-indigo-900 mr-3">绑定</button>
-                            <button @click="deleteAccount(account.id)" class="text-red-600 hover:text-red-900">删除</button>
+                            <button @click.stop="openBindModal(account)" class="text-indigo-600 hover:text-indigo-900 mr-3">绑定</button>
+                            <button @click.stop="deleteAccount(account.id)" class="text-red-600 hover:text-red-900">删除</button>
                         </td>
                     </tr>
                 </template>
             </tbody>
         </table>
+    </div>
+
+    <div x-show="showDetailPanel" x-cloak class="fixed inset-0 z-40">
+        <div class="absolute inset-0 bg-gray-900/40" @click="closeDetailPanel()"></div>
+        <div class="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-xl overflow-y-auto">
+            <div class="p-6 space-y-6">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900">账号详情</h3>
+                    <button class="text-gray-500 hover:text-gray-800" @click="closeDetailPanel()">关闭</button>
+                </div>
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <div class="text-gray-500">用户名</div>
+                            <div class="font-medium text-gray-900" x-text="detailAccount?.username || '-'"></div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500">邮箱</div>
+                            <div class="font-medium text-gray-900" x-text="detailAccount?.email || '-'"></div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500">地区</div>
+                            <div class="font-medium text-gray-900" x-text="detailAccount?.region || '-'"></div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500">时区</div>
+                            <div class="font-medium text-gray-900" x-text="detailAccount?.target_timezone || '-'"></div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500">2FA</div>
+                            <div class="font-medium text-gray-900" x-text="detailAccount?.totp_secret ? '已配置' : '未配置'"></div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500">创建时间</div>
+                            <div class="font-medium text-gray-900" x-text="formatDate(detailAccount?.created_at)"></div>
+                        </div>
+                        <div class="col-span-2">
+                            <div class="text-gray-500">备注</div>
+                            <div class="font-medium text-gray-900" x-text="detailAccount?.notes || '-'"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-semibold text-gray-900 mb-2">绑定代理</div>
+                        <div class="text-sm text-gray-700" x-text="detailAccount?.proxy ? `${detailAccount.proxy.host}:${detailAccount.proxy.port}` : '未绑定'"></div>
+                        <div class="text-xs text-gray-500" x-text="detailAccount?.proxy?.region || ''"></div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-semibold text-gray-900 mb-2">绑定窗口</div>
+                        <div class="text-sm text-gray-700" x-text="detailAccount?.browser_window?.name || '未绑定'"></div>
+                        <div class="text-xs text-gray-500" x-text="detailAccount?.browser_window?.bit_window_id || ''"></div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="text-sm font-semibold text-gray-900">BM</div>
+                            <button x-show="!detailAssets?.bm" @click="openBmBindModal()" class="text-xs text-indigo-600 hover:text-indigo-800">绑定</button>
+                        </div>
+                        <div x-show="detailAssets?.bm">
+                            <div class="text-sm text-gray-700" x-text="detailAssets?.bm?.bm_id || '-'"></div>
+                            <div class="text-xs text-gray-500" x-text="detailAssets?.bm?.name || '-'"></div>
+                            <div class="text-xs text-gray-500" x-text="detailAssets?.bm?.status || '-'"></div>
+                        </div>
+                        <div x-show="!detailAssets?.bm" class="text-sm text-gray-500">未绑定 BM</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-semibold text-gray-900 mb-2">广告账户</div>
+                        <div class="space-y-2">
+                            <template x-for="item in detailAssets.ad_accounts" :key="item.ad_account_id">
+                                <div class="flex items-center justify-between text-sm bg-gray-50 rounded-md px-3 py-2 cursor-pointer hover:bg-gray-100" @click="goToAdAccount(item)">
+                                    <div class="text-gray-700" x-text="item.ad_account_id"></div>
+                                    <div class="text-gray-500" x-text="item.spending_limit"></div>
+                                    <div class="text-gray-500" x-text="formatCurrency(item.daily_budget)"></div>
+                                    <div class="text-gray-500" x-text="item.status"></div>
+                                </div>
+                            </template>
+                            <div x-show="detailAssets.ad_accounts.length === 0" class="text-sm text-gray-500">暂无广告账户</div>
+                        </div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-semibold text-gray-900 mb-2">Fanpage</div>
+                        <div class="space-y-2">
+                            <template x-for="item in detailAssets.fanpages" :key="item.page_id">
+                                <div class="flex items-center justify-between text-sm bg-gray-50 rounded-md px-3 py-2 cursor-pointer hover:bg-gray-100" @click="goToFanpage(item)">
+                                    <div class="text-gray-700" x-text="item.page_name"></div>
+                                    <div class="text-gray-500" x-text="item.pixel_installed ? '✅' : '❌'"></div>
+                                    <div class="text-gray-500" x-text="item.domain_verified ? '✅' : '❌'"></div>
+                                </div>
+                            </template>
+                            <div x-show="detailAssets.fanpages.length === 0" class="text-sm text-gray-500">暂无 Fanpage</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 新增账号模态框 -->
@@ -194,6 +297,50 @@
             </div>
         </div>
     </div>
+    <div x-show="showBmBindModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showBmBindModal = false"></div>
+            <div class="inline-block w-full max-w-xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium leading-6 text-gray-900">绑定 BM</h3>
+                    <div class="flex gap-2 text-xs">
+                        <button @click="bmBindMode = 'select'" :class="bmBindMode === 'select' ? 'text-indigo-600' : 'text-gray-500'">选择已有</button>
+                        <button @click="bmBindMode = 'create'" :class="bmBindMode === 'create' ? 'text-indigo-600' : 'text-gray-500'">新建</button>
+                    </div>
+                </div>
+                <div x-show="bmBindMode === 'select'" class="space-y-3">
+                    <select x-model="selectedBmId" class="w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                        <option value="">请选择 BM</option>
+                        <template x-for="bm in bmCandidates" :key="bm.id">
+                            <option :value="bm.id" x-text="bm.name ? `${bm.name} (${bm.bm_id})` : bm.bm_id"></option>
+                        </template>
+                    </select>
+                    <div class="flex justify-end gap-3">
+                        <button type="button" @click="showBmBindModal = false" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                        <button type="button" @click="bindExistingBm" :disabled="!selectedBmId" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">确认绑定</button>
+                    </div>
+                </div>
+                <div x-show="bmBindMode === 'create'" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">BM ID</label>
+                        <input type="text" x-model="bmCreateForm.bm_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">名称</label>
+                        <input type="text" x-model="bmCreateForm.name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">地区</label>
+                        <input type="text" x-model="bmCreateForm.region" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                    </div>
+                    <div class="flex justify-end gap-3">
+                        <button type="button" @click="showBmBindModal = false" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                        <button type="button" @click="createAndBindBm" :disabled="!bmCreateForm.bm_id" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">创建并绑定</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <!-- 批量导入模态框 -->
     <div x-show="showBatchModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
         <div class="flex items-center justify-center min-h-screen px-4 text-center">
@@ -240,11 +387,20 @@
             showCreateModal: false,
             showBindModal: false,
             showBatchModal: false,
+            showDetailPanel: false,
+            showBmBindModal: false,
             batchText: '',
             importResult: null,
             selectedAccount: null,
             selectedProxyId: null,
             selectedWindowId: null,
+            detailAccount: null,
+            detailAssets: { bm: null, ad_accounts: [], fanpages: [] },
+            detailLoading: false,
+            bmCandidates: [],
+            bmBindMode: 'select',
+            selectedBmId: '',
+            bmCreateForm: { bm_id: '', name: '', region: '' },
             newAccount: {
                 username: '',
                 password: '',
@@ -264,9 +420,58 @@
                 try {
                     const res = await fetch(url);
                     this.accounts = await res.json();
+                    await this.loadAdAssetsStatus();
                 } catch (e) {
                     console.error('Failed to fetch accounts', e);
                 }
+            },
+
+            async loadAdAssetsStatus() {
+                const tasks = this.accounts.map(async (account) => {
+                    account.ad_assets_loading = true
+                    try {
+                        const res = await fetch(`/api/accounts/${account.id}/ad-assets`)
+                        if (!res.ok) return
+                        const assets = await res.json()
+                        account.ad_assets = assets
+                        account.ad_assets_loaded = true
+                    } catch (e) {
+                        console.error('Failed to fetch ad assets', e)
+                    } finally {
+                        account.ad_assets_loading = false
+                    }
+                })
+                await Promise.all(tasks)
+            },
+
+            isAdAssetsLoading(account) {
+                return !!account?.ad_assets_loading
+            },
+
+            isAdAssetsReady(account) {
+                if (!account?.ad_assets_loaded) return false
+                const assets = account.ad_assets || {}
+                const hasBm = !!assets.bm
+                const hasAdAccounts = Array.isArray(assets.ad_accounts) && assets.ad_accounts.length > 0
+                const hasFanpages = Array.isArray(assets.fanpages) && assets.fanpages.length > 0
+                return hasBm && hasAdAccounts && hasFanpages
+            },
+
+            getAdAssetsMissingLabel(account) {
+                if (!account?.ad_assets_loaded) return 'BM/广告账户/Fanpage'
+                const assets = account.ad_assets || {}
+                const missing = []
+                if (!assets.bm) missing.push('BM')
+                if (!Array.isArray(assets.ad_accounts) || assets.ad_accounts.length === 0) missing.push('广告账户')
+                if (!Array.isArray(assets.fanpages) || assets.fanpages.length === 0) missing.push('Fanpage')
+                return missing.join('/')
+            },
+
+            exportAccounts() {
+                const params = new URLSearchParams()
+                if (this.statusFilter) params.append('status', this.statusFilter)
+                if (this.searchQuery) params.append('q', this.searchQuery)
+                window.location.href = `/api/accounts/export?${params.toString()}`
             },
 
             async fetchIdleResources() {
@@ -298,6 +503,109 @@
                 if (!dateStr) return '从未';
                 const date = new Date(dateStr);
                 return date.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            },
+
+            formatCurrency(cents) {
+                if (cents === null || cents === undefined) return '-'
+                return `$${(Number(cents) / 100).toFixed(2)}`
+            },
+
+            async openDetailPanel(account) {
+                this.detailAccount = account
+                this.detailAssets = { bm: null, ad_accounts: [], fanpages: [] }
+                this.detailLoading = true
+                this.showDetailPanel = true
+                const assets = await this.fetchAccountAdAssets(account.id)
+                if (assets) this.detailAssets = assets
+                this.detailLoading = false
+            },
+
+            closeDetailPanel() {
+                this.showDetailPanel = false
+            },
+
+            async fetchAccountAdAssets(accountId) {
+                try {
+                    const res = await fetch(`/api/accounts/${accountId}/ad-assets`)
+                    if (!res.ok) return null
+                    const assets = await res.json()
+                    const targetAccount = this.accounts.find(item => item.id === accountId)
+                    if (targetAccount) {
+                        targetAccount.ad_assets = assets
+                        targetAccount.ad_assets_loaded = true
+                        targetAccount.ad_assets_loading = false
+                    }
+                    return assets
+                } catch (e) {
+                    console.error('Failed to fetch ad assets', e)
+                    return null
+                }
+            },
+
+            goToAdAccount(item) {
+                window.location.href = `/ads?ad_account_id=${encodeURIComponent(item.ad_account_id)}`
+            },
+
+            goToFanpage(item) {
+                if (!this.detailAccount) return
+                window.location.href = `/ads?tab=fanpages&fb_account_id=${encodeURIComponent(this.detailAccount.id)}`
+            },
+
+            async openBmBindModal() {
+                this.bmBindMode = 'select'
+                this.selectedBmId = ''
+                this.bmCreateForm = { bm_id: '', name: '', region: '' }
+                this.showBmBindModal = true
+                await this.fetchBmCandidates()
+            },
+
+            async fetchBmCandidates() {
+                try {
+                    const res = await fetch('/api/bm')
+                    if (!res.ok) return
+                    this.bmCandidates = await res.json()
+                } catch (e) {
+                    console.error('Failed to fetch BM list', e)
+                }
+            },
+
+            async bindExistingBm() {
+                if (!this.selectedBmId || !this.detailAccount) return
+                try {
+                    const res = await fetch(`/api/bm/${this.selectedBmId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ fb_account_id: this.detailAccount.id })
+                    })
+                    if (!res.ok) throw new Error('绑定失败')
+                    this.showBmBindModal = false
+                    const assets = await this.fetchAccountAdAssets(this.detailAccount.id)
+                    if (assets) this.detailAssets = assets
+                } catch (e) {
+                    alert(e.message || '绑定失败')
+                }
+            },
+
+            async createAndBindBm() {
+                if (!this.detailAccount || !this.bmCreateForm.bm_id) return
+                try {
+                    const res = await fetch('/api/bm', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            bm_id: this.bmCreateForm.bm_id,
+                            name: this.bmCreateForm.name,
+                            region: this.bmCreateForm.region,
+                            fb_account_id: this.detailAccount.id
+                        })
+                    })
+                    if (!res.ok) throw new Error('创建失败')
+                    this.showBmBindModal = false
+                    const assets = await this.fetchAccountAdAssets(this.detailAccount.id)
+                    if (assets) this.detailAssets = assets
+                } catch (e) {
+                    alert(e.message || '创建失败')
+                }
             },
 
             openCreateModal() {

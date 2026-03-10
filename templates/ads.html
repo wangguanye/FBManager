@@ -1,0 +1,974 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="adsManager()" x-init="init()" class="space-y-6">
+    <div class="bg-white rounded-lg shadow-sm p-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="flex items-center gap-2">
+                <button @click="selectTab('bm')" class="px-4 py-2 rounded-lg text-sm font-medium"
+                        :class="activeTab === 'bm' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'">BM 管理</button>
+                <button @click="selectTab('ad_accounts')" class="px-4 py-2 rounded-lg text-sm font-medium"
+                        :class="activeTab === 'ad_accounts' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'">广告账户</button>
+                <button @click="selectTab('fanpages')" class="px-4 py-2 rounded-lg text-sm font-medium"
+                        :class="activeTab === 'fanpages' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'">Fanpage</button>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'bm'" x-cloak class="space-y-6">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
+            <div class="flex items-center gap-4 w-full sm:w-auto">
+                <button @click="openBmModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    新增 BM
+                </button>
+                <div class="relative">
+                    <select x-model="bmStatusFilter" @change="fetchBms()" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                        <option value="">全部</option>
+                        <option value="active">active</option>
+                        <option value="restricted">restricted</option>
+                        <option value="disabled">disabled</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">BM ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">归属 FB 账号</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">地区</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">广告账户数</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">创建时间</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="bm in bms" :key="bm.id">
+                            <tr :class="bm.status === 'disabled' ? 'bg-red-50' : ''">
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                          :class="getBmStatusColor(bm.status)" x-text="bm.status"></span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="bm.bm_id"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="bm.name || '-'"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="getAccountNameById(bm.fb_account_id)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="bm.region || '-'"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                    <button @click="jumpToAdAccounts(bm.id)" class="text-indigo-600 hover:text-indigo-900 font-medium" x-text="bm.ad_account_count"></button>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDateTime(bm.created_at)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <button @click="openBmModal(bm)" class="text-indigo-600 hover:text-indigo-900 mr-3">编辑</button>
+                                    <button @click="deleteBm(bm)" class="text-red-600 hover:text-red-900">删除</button>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="bms.length === 0">
+                            <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">暂无 BM 数据</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'ad_accounts'" x-cloak class="space-y-6">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
+            <div class="flex items-center gap-4 w-full sm:w-auto flex-wrap">
+                <button @click="openAdAccountModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    新增广告账户
+                </button>
+                <div class="relative">
+                    <select x-model="adAccountBmFilter" @change="fetchAdAccounts()" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                        <option value="">全部 BM</option>
+                        <template x-for="bm in bms" :key="bm.id">
+                            <option :value="bm.id" x-text="bm.name ? `${bm.name} (${bm.bm_id})` : bm.bm_id"></option>
+                        </template>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+                <div class="relative">
+                    <select x-model="adAccountStatusFilter" @change="fetchAdAccounts()" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                        <option value="">全部状态</option>
+                        <option value="active">active</option>
+                        <option value="paused">paused</option>
+                        <option value="disabled">disabled</option>
+                        <option value="review">review</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+                <div class="relative">
+                    <select x-model="adAccountExportId" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                        <option value="">选择导出账户</option>
+                        <template x-for="ad in adAccounts" :key="ad.id">
+                            <option :value="ad.id" x-text="ad.name ? `${ad.name} (${ad.ad_account_id})` : ad.ad_account_id"></option>
+                        </template>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+                <button @click="exportAdStats()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                    📥 导出 CSV
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">广告账户 ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">归属 BM</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">额度层级</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日预算</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">累计消耗</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">付款方式</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="ad in adAccounts" :key="ad.id">
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                          :class="getAdStatusColor(ad.status)" x-text="ad.status"></span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="ad.ad_account_id"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="ad.name || '-'"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="ad.bm_name || '-'"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="ad.spending_limit"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="formatCurrency(ad.daily_budget)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="formatCurrency(ad.total_spend)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="ad.payment_method || '-'"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <button @click="openAdAccountModal(ad)" class="text-indigo-600 hover:text-indigo-900 mr-3">编辑</button>
+                                    <button @click="openAdStatModal(ad)" class="text-green-600 hover:text-green-900 mr-3">录入数据</button>
+                                    <button @click="openAdDetail(ad)" class="text-gray-700 hover:text-gray-900">查看详情</button>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="adAccounts.length === 0">
+                            <td colspan="9" class="px-6 py-4 text-center text-sm text-gray-500">暂无广告账户数据</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="activeTab === 'fanpages'" x-cloak class="space-y-6">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
+            <div class="flex items-center gap-4 w-full sm:w-auto flex-wrap">
+                <button @click="openFanpageModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    新增 Fanpage
+                </button>
+                <div class="relative">
+                    <select x-model="fanpageAccountFilter" @change="fetchFanpages()" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 pr-8">
+                        <option value="">全部账号</option>
+                        <template x-for="account in fbAccounts" :key="account.id">
+                            <option :value="account.id" x-text="account.username"></option>
+                        </template>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Page ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">主页名称</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">归属 FB 账号</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pixel 已安装</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">域名已验证</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="page in fanpages" :key="page.id">
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                          :class="getFanpageStatusColor(page.status)" x-text="page.status"></span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="page.page_id"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="page.page_name"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" x-text="page.fb_account_name || '-'"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm" x-text="page.pixel_installed ? '✅' : '❌'"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm" x-text="page.domain_verified ? '✅' : '❌'"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    <button @click="openFanpageModal(page)" class="text-indigo-600 hover:text-indigo-900">编辑</button>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="fanpages.length === 0">
+                            <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">暂无 Fanpage 数据</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showBmModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeBmModal()"></div>
+            <div class="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4" x-text="bmForm.id ? '编辑 BM' : '新增 BM'"></h3>
+                <form @submit.prevent="submitBm">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">BM ID</label>
+                            <input type="text" x-model="bmForm.bm_id" :disabled="!!bmForm.id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">归属 FB 账号</label>
+                            <select x-model="bmForm.fb_account_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                <option value="">未绑定</option>
+                                <template x-for="account in fbAccounts" :key="account.id">
+                                    <option :value="account.id" x-text="account.username"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">名称</label>
+                            <input type="text" x-model="bmForm.name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">地区</label>
+                            <input type="text" x-model="bmForm.region" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div x-show="bmForm.id" class="mt-2">
+                            <label class="block text-sm font-medium text-gray-700">状态</label>
+                            <select x-model="bmForm.status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                <option value="active">active</option>
+                                <option value="restricted">restricted</option>
+                                <option value="disabled">disabled</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button type="button" @click="closeBmModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showAdAccountModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeAdAccountModal()"></div>
+            <div class="inline-block w-full max-w-xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4" x-text="adAccountForm.id ? '编辑广告账户' : '新增广告账户'"></h3>
+                <form @submit.prevent="submitAdAccount">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">广告账户 ID</label>
+                            <input type="text" x-model="adAccountForm.ad_account_id" :disabled="!!adAccountForm.id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">归属 BM</label>
+                            <select x-model="adAccountForm.bm_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                <option value="">未绑定</option>
+                                <template x-for="bm in bms" :key="bm.id">
+                                    <option :value="bm.id" x-text="bm.name ? `${bm.name} (${bm.bm_id})` : bm.bm_id"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">名称</label>
+                            <input type="text" x-model="adAccountForm.name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">额度层级</label>
+                            <select x-model="adAccountForm.spending_limit" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                <option value="$100">$100</option>
+                                <option value="$350">$350</option>
+                                <option value="$450">$450</option>
+                                <option value="$1500">$1500</option>
+                                <option value="unlimited">unlimited</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">付款方式</label>
+                            <input type="text" x-model="adAccountForm.payment_method" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div x-show="adAccountForm.id" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">状态</label>
+                                <select x-model="adAccountForm.status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                    <option value="active">active</option>
+                                    <option value="paused">paused</option>
+                                    <option value="disabled">disabled</option>
+                                    <option value="review">review</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">日预算($)</label>
+                                <input type="number" x-model="adAccountForm.daily_budget" min="0" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                        </div>
+                        <div x-show="isBudgetChanged()">
+                            <label class="block text-sm font-medium text-gray-700">递增依据（选填）</label>
+                            <textarea x-model="adAccountForm.budget_reason" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button type="button" @click="closeAdAccountModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showFanpageModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeFanpageModal()"></div>
+            <div class="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4" x-text="fanpageForm.id ? '编辑 Fanpage' : '新增 Fanpage'"></h3>
+                <form @submit.prevent="submitFanpage">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Page ID</label>
+                            <input type="text" x-model="fanpageForm.page_id" :disabled="!!fanpageForm.id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">归属 FB 账号</label>
+                            <select x-model="fanpageForm.fb_account_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                <option value="">未绑定</option>
+                                <template x-for="account in fbAccounts" :key="account.id">
+                                    <option :value="account.id" x-text="account.username"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">主页名称</label>
+                            <input type="text" x-model="fanpageForm.page_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">URL</label>
+                            <input type="text" x-model="fanpageForm.page_url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div x-show="fanpageForm.id" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">状态</label>
+                                <select x-model="fanpageForm.status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                                    <option value="active">active</option>
+                                    <option value="unpublished">unpublished</option>
+                                    <option value="disabled">disabled</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center gap-2 mt-6">
+                                <input type="checkbox" x-model="fanpageForm.pixel_installed" class="h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                <span class="text-sm text-gray-700">Pixel 已安装</span>
+                            </div>
+                            <div class="flex items-center gap-2 mt-6">
+                                <input type="checkbox" x-model="fanpageForm.domain_verified" class="h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                <span class="text-sm text-gray-700">域名已验证</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button type="button" @click="closeFanpageModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showAdStatModal" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeAdStatModal()"></div>
+            <div class="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">录入投放数据</h3>
+                <form @submit.prevent="submitAdStat">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">广告账户</label>
+                            <input type="text" x-model="adStatForm.ad_account_label" disabled class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm border p-2 bg-gray-100">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">日期</label>
+                            <input type="date" x-model="adStatForm.date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">消耗($)</label>
+                                <input type="number" x-model="adStatForm.spend" min="0" step="0.01" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">展示次数</label>
+                                <input type="number" x-model="adStatForm.impressions" min="0" step="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">点击次数</label>
+                                <input type="number" x-model="adStatForm.clicks" min="0" step="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">转化次数</label>
+                                <input type="number" x-model="adStatForm.conversions" min="0" step="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button type="button" @click="closeAdStatModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">取消</button>
+                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">提交</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="showDetailPanel" x-cloak class="fixed inset-0 z-40">
+        <div class="absolute inset-0 bg-gray-900 bg-opacity-30" @click="closeAdDetail()"></div>
+        <div class="absolute top-0 right-0 w-full max-w-xl h-full bg-white shadow-xl overflow-y-auto">
+            <div class="p-6 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-900">广告账户详情</h3>
+                <button @click="closeAdDetail()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-6">
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="grid grid-cols-1 gap-2 text-sm text-gray-700">
+                        <div>广告账户 ID：<span class="font-medium" x-text="adDetail.account?.ad_account_id || '-'"></span></div>
+                        <div>名称：<span class="font-medium" x-text="adDetail.account?.name || '-'"></span></div>
+                        <div>归属 BM：<span class="font-medium" x-text="adDetail.bm?.bm_id || '-'"></span></div>
+                        <div>额度层级：<span class="font-medium" x-text="adDetail.account?.spending_limit || '-'"></span></div>
+                        <div>状态：<span class="font-medium" x-text="adDetail.account?.status || '-'"></span></div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg border border-gray-200 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-semibold text-gray-900">最近 30 天投放数据</h4>
+                        <span class="text-xs text-gray-500" x-text="adDetail.recent_stats?.length ? `共 ${adDetail.recent_stats.length} 天` : '无数据'"></span>
+                    </div>
+                    <canvas id="adTrendChart" class="w-full h-56"></canvas>
+                </div>
+                <div class="bg-white rounded-lg border border-gray-200 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-semibold text-gray-900">预算递增历史</h4>
+                        <span class="text-xs text-gray-500" x-text="adDetail.budget_changes?.length ? `共 ${adDetail.budget_changes.length} 条` : '无记录'"></span>
+                    </div>
+                    <div class="space-y-3">
+                        <template x-for="item in adDetail.budget_changes" :key="item.id">
+                            <div class="p-3 bg-gray-50 rounded-lg text-sm text-gray-700">
+                                <div class="font-medium" x-text="formatDateTime(item.changed_at)"></div>
+                                <div class="mt-1" x-text="`${formatCurrency(item.old_budget)} → ${formatCurrency(item.new_budget)}`"></div>
+                                <div class="mt-1 text-xs text-gray-500" x-text="item.reason || '-'"></div>
+                            </div>
+                        </template>
+                        <div x-show="adDetail.budget_changes?.length === 0" class="text-sm text-gray-500">暂无预算递增记录</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    function adsManager() {
+        return {
+            activeTab: 'bm',
+            bms: [],
+            adAccounts: [],
+            fanpages: [],
+            fbAccounts: [],
+            bmStatusFilter: '',
+            adAccountBmFilter: '',
+            adAccountStatusFilter: '',
+            adAccountExportId: '',
+            fanpageAccountFilter: '',
+            pendingAdAccountId: '',
+            pendingFanpageAccountId: '',
+            showBmModal: false,
+            showAdAccountModal: false,
+            showFanpageModal: false,
+            showAdStatModal: false,
+            showDetailPanel: false,
+            bmForm: { id: null, bm_id: '', fb_account_id: '', name: '', region: '', status: 'active' },
+            adAccountForm: { id: null, ad_account_id: '', bm_id: '', name: '', spending_limit: '$100', payment_method: '', status: 'active', daily_budget: '', original_daily_budget_cents: 0, budget_reason: '' },
+            fanpageForm: { id: null, page_id: '', fb_account_id: '', page_name: '', page_url: '', status: 'active', pixel_installed: false, domain_verified: false },
+            adStatForm: { ad_account_id: null, ad_account_label: '', date: '', spend: '', impressions: 0, clicks: 0, conversions: 0 },
+            adDetail: { account: null, bm: null, recent_stats: [], budget_changes: [] },
+            chartInstance: null,
+            constants: { centsMultiplier: 100 },
+
+            async init() {
+                this.highlightNav()
+                const params = new URLSearchParams(window.location.search)
+                const tabParam = params.get('tab')
+                const adAccountParam = params.get('ad_account_id')
+                const fanpageAccountParam = params.get('fb_account_id')
+                if (tabParam) this.activeTab = tabParam
+                if (adAccountParam) {
+                    this.pendingAdAccountId = adAccountParam
+                    this.activeTab = 'ad_accounts'
+                }
+                if (fanpageAccountParam) {
+                    this.pendingFanpageAccountId = fanpageAccountParam
+                    this.fanpageAccountFilter = fanpageAccountParam
+                    this.activeTab = 'fanpages'
+                }
+                await this.fetchAccounts()
+                await this.fetchBms()
+                await this.fetchAdAccounts()
+                await this.fetchFanpages()
+            },
+
+            highlightNav() {
+                const link = document.querySelector('a[href="/ads"]')
+                if (link) link.classList.add('bg-indigo-700')
+            },
+
+            selectTab(tab) {
+                this.activeTab = tab
+                if (tab === 'bm') this.fetchBms()
+                if (tab === 'ad_accounts') this.fetchAdAccounts()
+                if (tab === 'fanpages') this.fetchFanpages()
+            },
+
+            async fetchAccounts() {
+                try {
+                    const res = await fetch('/api/accounts?limit=500')
+                    if (!res.ok) throw new Error('加载账号失败')
+                    this.fbAccounts = await res.json()
+                } catch (e) {
+                    showToast(e.message || '加载账号失败', 'error')
+                }
+            },
+
+            async fetchBms() {
+                try {
+                    let url = '/api/bm?'
+                    if (this.bmStatusFilter) url += `status=${encodeURIComponent(this.bmStatusFilter)}&`
+                    const res = await fetch(url)
+                    if (!res.ok) throw new Error('加载 BM 失败')
+                    this.bms = await res.json()
+                } catch (e) {
+                    showToast(e.message || '加载 BM 失败', 'error')
+                }
+            },
+
+            async fetchAdAccounts() {
+                try {
+                    let url = '/api/ad-accounts?'
+                    if (this.adAccountBmFilter) url += `bm_id=${encodeURIComponent(this.adAccountBmFilter)}&`
+                    if (this.adAccountStatusFilter) url += `status=${encodeURIComponent(this.adAccountStatusFilter)}&`
+                    const res = await fetch(url)
+                    if (!res.ok) throw new Error('加载广告账户失败')
+                    this.adAccounts = await res.json()
+                    if (this.pendingAdAccountId) {
+                        const target = this.adAccounts.find(item => String(item.ad_account_id) === String(this.pendingAdAccountId))
+                        if (target) {
+                            await this.openAdDetail(target)
+                        }
+                        this.pendingAdAccountId = ''
+                    }
+                } catch (e) {
+                    showToast(e.message || '加载广告账户失败', 'error')
+                }
+            },
+
+            exportAdStats() {
+                if (!this.adAccountExportId) {
+                    showToast('请选择广告账户', 'warn')
+                    return
+                }
+                const params = new URLSearchParams({ ad_account_id: this.adAccountExportId })
+                window.location.href = `/api/ad-stats/export?${params.toString()}`
+            },
+
+            async fetchFanpages() {
+                try {
+                    let url = '/api/fanpages?'
+                    if (this.fanpageAccountFilter) url += `fb_account_id=${encodeURIComponent(this.fanpageAccountFilter)}&`
+                    const res = await fetch(url)
+                    if (!res.ok) throw new Error('加载 Fanpage 失败')
+                    this.fanpages = await res.json()
+                    this.pendingFanpageAccountId = ''
+                } catch (e) {
+                    showToast(e.message || '加载 Fanpage 失败', 'error')
+                }
+            },
+
+            openBmModal(bm = null) {
+                if (bm) {
+                    this.bmForm = {
+                        id: bm.id,
+                        bm_id: bm.bm_id,
+                        fb_account_id: bm.fb_account_id || '',
+                        name: bm.name || '',
+                        region: bm.region || '',
+                        status: bm.status || 'active'
+                    }
+                } else {
+                    this.bmForm = { id: null, bm_id: '', fb_account_id: '', name: '', region: '', status: 'active' }
+                }
+                this.showBmModal = true
+            },
+
+            closeBmModal() {
+                this.showBmModal = false
+            },
+
+            async submitBm() {
+                try {
+                    const payload = {
+                        bm_id: this.bmForm.bm_id,
+                        fb_account_id: this.bmForm.fb_account_id || null,
+                        name: this.bmForm.name || null,
+                        region: this.bmForm.region || null
+                    }
+                    let res
+                    if (this.bmForm.id) {
+                        res = await fetch(`/api/bm/${this.bmForm.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ...payload, status: this.bmForm.status })
+                        })
+                    } else {
+                        res = await fetch('/api/bm', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        })
+                    }
+                    if (!res.ok) throw new Error('保存 BM 失败')
+                    this.showBmModal = false
+                    await this.fetchBms()
+                    showToast('BM 保存成功', 'info')
+                } catch (e) {
+                    showToast(e.message || '保存 BM 失败', 'error')
+                }
+            },
+
+            async deleteBm(bm) {
+                try {
+                    const res = await fetch(`/api/bm/${bm.id}`, { method: 'DELETE' })
+                    if (!res.ok) {
+                        const detail = await res.json()
+                        throw new Error(detail.detail || '删除 BM 失败')
+                    }
+                    await this.fetchBms()
+                    showToast('BM 已删除', 'info')
+                } catch (e) {
+                    showToast(e.message || '删除 BM 失败', 'error')
+                }
+            },
+
+            openAdAccountModal(ad = null) {
+                if (ad) {
+                    const originalBudgetCents = ad.daily_budget || 0
+                    this.adAccountForm = {
+                        id: ad.id,
+                        ad_account_id: ad.ad_account_id,
+                        bm_id: ad.bm_id || '',
+                        name: ad.name || '',
+                        spending_limit: ad.spending_limit || '$100',
+                        payment_method: ad.payment_method || '',
+                        status: ad.status || 'active',
+                        daily_budget: ad.daily_budget ? (ad.daily_budget / this.constants.centsMultiplier).toFixed(2) : '',
+                        original_daily_budget_cents: originalBudgetCents,
+                        budget_reason: ''
+                    }
+                } else {
+                    this.adAccountForm = { id: null, ad_account_id: '', bm_id: '', name: '', spending_limit: '$100', payment_method: '', status: 'active', daily_budget: '', original_daily_budget_cents: 0, budget_reason: '' }
+                }
+                this.showAdAccountModal = true
+            },
+
+            closeAdAccountModal() {
+                this.showAdAccountModal = false
+            },
+
+            isBudgetChanged() {
+                if (!this.adAccountForm.id) return false
+                if (this.adAccountForm.daily_budget === '') return false
+                const newBudgetCents = this.toCents(this.adAccountForm.daily_budget)
+                return newBudgetCents !== this.adAccountForm.original_daily_budget_cents
+            },
+
+            async submitAdAccount() {
+                try {
+                    const payload = {
+                        ad_account_id: this.adAccountForm.ad_account_id,
+                        bm_id: this.adAccountForm.bm_id || null,
+                        name: this.adAccountForm.name || null,
+                        spending_limit: this.adAccountForm.spending_limit,
+                        payment_method: this.adAccountForm.payment_method || null
+                    }
+                    const shouldSendReason = this.isBudgetChanged()
+                    let res
+                    let responsePayload = null
+                    if (this.adAccountForm.id) {
+                        const dailyBudgetCents = this.adAccountForm.daily_budget === '' ? null : this.toCents(this.adAccountForm.daily_budget)
+                        res = await fetch(`/api/ad-accounts/${this.adAccountForm.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                ...payload,
+                                status: this.adAccountForm.status,
+                                daily_budget: dailyBudgetCents,
+                                reason: shouldSendReason ? (this.adAccountForm.budget_reason || null) : null
+                            })
+                        })
+                    } else {
+                        res = await fetch('/api/ad-accounts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        })
+                    }
+                    if (!res.ok) throw new Error('保存广告账户失败')
+                    responsePayload = await res.json()
+                    this.showAdAccountModal = false
+                    await this.fetchAdAccounts()
+                    showToast('广告账户保存成功', 'info')
+                    if (responsePayload && Array.isArray(responsePayload.warnings)) {
+                        responsePayload.warnings.forEach(item => {
+                            showToast(item, 'warn')
+                        })
+                    }
+                } catch (e) {
+                    showToast(e.message || '保存广告账户失败', 'error')
+                }
+            },
+
+            openFanpageModal(page = null) {
+                if (page) {
+                    this.fanpageForm = {
+                        id: page.id,
+                        page_id: page.page_id,
+                        fb_account_id: page.fb_account_id || '',
+                        page_name: page.page_name || '',
+                        page_url: page.page_url || '',
+                        status: page.status || 'active',
+                        pixel_installed: !!page.pixel_installed,
+                        domain_verified: !!page.domain_verified
+                    }
+                } else {
+                    this.fanpageForm = { id: null, page_id: '', fb_account_id: '', page_name: '', page_url: '', status: 'active', pixel_installed: false, domain_verified: false }
+                }
+                this.showFanpageModal = true
+            },
+
+            closeFanpageModal() {
+                this.showFanpageModal = false
+            },
+
+            async submitFanpage() {
+                try {
+                    const payload = {
+                        page_id: this.fanpageForm.page_id,
+                        fb_account_id: this.fanpageForm.fb_account_id || null,
+                        page_name: this.fanpageForm.page_name,
+                        page_url: this.fanpageForm.page_url || null
+                    }
+                    let res
+                    if (this.fanpageForm.id) {
+                        res = await fetch(`/api/fanpages/${this.fanpageForm.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                ...payload,
+                                status: this.fanpageForm.status,
+                                pixel_installed: this.fanpageForm.pixel_installed,
+                                domain_verified: this.fanpageForm.domain_verified
+                            })
+                        })
+                    } else {
+                        res = await fetch('/api/fanpages', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        })
+                    }
+                    if (!res.ok) throw new Error('保存 Fanpage 失败')
+                    this.showFanpageModal = false
+                    await this.fetchFanpages()
+                    showToast('Fanpage 保存成功', 'info')
+                } catch (e) {
+                    showToast(e.message || '保存 Fanpage 失败', 'error')
+                }
+            },
+
+            openAdStatModal(ad) {
+                const today = new Date().toISOString().slice(0, 10)
+                this.adStatForm = {
+                    ad_account_id: ad.id,
+                    ad_account_label: ad.ad_account_id,
+                    date: today,
+                    spend: '',
+                    impressions: 0,
+                    clicks: 0,
+                    conversions: 0
+                }
+                this.showAdStatModal = true
+            },
+
+            closeAdStatModal() {
+                this.showAdStatModal = false
+            },
+
+            async submitAdStat() {
+                try {
+                    const payload = {
+                        ad_account_id: this.adStatForm.ad_account_id,
+                        date: this.adStatForm.date,
+                        spend: this.toCents(this.adStatForm.spend || 0),
+                        impressions: Number(this.adStatForm.impressions || 0),
+                        clicks: Number(this.adStatForm.clicks || 0),
+                        conversions: Number(this.adStatForm.conversions || 0)
+                    }
+                    const res = await fetch('/api/ad-stats', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    })
+                    if (!res.ok) throw new Error('录入数据失败')
+                    this.showAdStatModal = false
+                    await this.fetchAdAccounts()
+                    showToast('投放数据已更新', 'info')
+                } catch (e) {
+                    showToast(e.message || '录入数据失败', 'error')
+                }
+            },
+
+            async openAdDetail(ad) {
+                try {
+                    const res = await fetch(`/api/ad-accounts/${ad.id}/detail`)
+                    if (!res.ok) throw new Error('加载详情失败')
+                    this.adDetail = await res.json()
+                    this.showDetailPanel = true
+                    this.renderChart()
+                } catch (e) {
+                    showToast(e.message || '加载详情失败', 'error')
+                }
+            },
+
+            closeAdDetail() {
+                this.showDetailPanel = false
+                if (this.chartInstance) {
+                    this.chartInstance.destroy()
+                    this.chartInstance = null
+                }
+            },
+
+            renderChart() {
+                const stats = [...(this.adDetail.recent_stats || [])].sort((a, b) => new Date(a.date) - new Date(b.date))
+                const labels = stats.map(item => item.date)
+                const spendData = stats.map(item => (item.spend || 0) / this.constants.centsMultiplier)
+                const ctrData = stats.map(item => item.ctr || 0)
+                const ctx = document.getElementById('adTrendChart')
+                if (!ctx) return
+                if (this.chartInstance) this.chartInstance.destroy()
+                this.chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: '消耗($)', data: spendData, borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,0.1)', tension: 0.3, yAxisID: 'y' },
+                            { label: 'CTR(%)', data: ctrData, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)', tension: 0.3, yAxisID: 'y1' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { beginAtZero: true },
+                            y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } }
+                        }
+                    }
+                })
+            },
+
+            jumpToAdAccounts(bmId) {
+                this.activeTab = 'ad_accounts'
+                this.adAccountBmFilter = String(bmId)
+                this.fetchAdAccounts()
+            },
+
+            getBmStatusColor(status) {
+                const colors = {
+                    active: 'bg-green-100 text-green-800',
+                    restricted: 'bg-orange-100 text-orange-800',
+                    disabled: 'bg-red-100 text-red-800'
+                }
+                return colors[status] || 'bg-gray-100 text-gray-800'
+            },
+
+            getAdStatusColor(status) {
+                const colors = {
+                    active: 'bg-green-100 text-green-800',
+                    paused: 'bg-yellow-100 text-yellow-800',
+                    disabled: 'bg-red-100 text-red-800',
+                    review: 'bg-orange-100 text-orange-800'
+                }
+                return colors[status] || 'bg-gray-100 text-gray-800'
+            },
+
+            getFanpageStatusColor(status) {
+                const colors = {
+                    active: 'bg-green-100 text-green-800',
+                    unpublished: 'bg-yellow-100 text-yellow-800',
+                    disabled: 'bg-red-100 text-red-800'
+                }
+                return colors[status] || 'bg-gray-100 text-gray-800'
+            },
+
+            formatCurrency(cents) {
+                const value = Number(cents || 0) / this.constants.centsMultiplier
+                return `$${value.toFixed(2)}`
+            },
+
+            toCents(amount) {
+                const value = Number(amount || 0)
+                return Math.round(value * this.constants.centsMultiplier)
+            },
+
+            formatDateTime(dateValue) {
+                if (!dateValue) return '-'
+                const date = new Date(dateValue)
+                if (Number.isNaN(date.getTime())) return dateValue
+                return date.toLocaleString()
+            },
+
+            getAccountNameById(accountId) {
+                if (!accountId) return '-'
+                const account = this.fbAccounts.find(item => item.id === accountId)
+                return account ? account.username : '-'
+            }
+        }
+    }
+</script>
+{% endblock %}

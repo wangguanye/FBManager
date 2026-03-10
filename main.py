@@ -9,12 +9,14 @@ import os
 
 from db.database import engine, Base
 from modules.asset.router import router as asset_router
+from modules.ad.router import router as ad_router
 from modules.monitor.router import router as monitor_router
 from modules.nurture.router import router as nurture_router
 from modules.system.router import router as system_router
 from modules.system.service import perform_backup, perform_log_cleanup
 from core.scheduler import start_scheduler, stop_scheduler
-from modules.asset.models import FBAccount, ProxyIP, BrowserWindow, CommentPool, AvatarAsset, AdDailyStat
+from modules.asset.models import FBAccount, ProxyIP, BrowserWindow, CommentPool, AvatarAsset
+from modules.ad.models import BMAccount, AdAccount, Fanpage, BudgetChange, AdDailyStat
 from modules.monitor.models import NurtureTask, ActionLog, Alert
 
 # 加载业务配置
@@ -63,6 +65,7 @@ templates = Jinja2Templates(directory="templates")
 
 # 注册 API 路由
 app.include_router(asset_router, prefix="/api")
+app.include_router(ad_router, prefix="/api")
 app.include_router(monitor_router, prefix="/api")
 app.include_router(nurture_router, prefix="/api")
 app.include_router(system_router, prefix="/api")

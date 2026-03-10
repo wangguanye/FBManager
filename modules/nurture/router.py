@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import date, datetime
+from pydantic import BaseModel
 
 from db.database import get_db
 from modules.monitor import schemas
@@ -9,6 +10,9 @@ from modules.nurture import service
 from core.scheduler import pause_scheduler, resume_scheduler, get_scheduler_status, scheduler
 
 router = APIRouter(tags=["Nurture Tasks"])
+
+class MaxConcurrentPayload(BaseModel):
+    value: int
 
 @router.get("/tasks/today", response_model=List[schemas.NurtureTask])
 async def get_today_tasks(
@@ -74,3 +78,15 @@ async def scheduler_status():
     status = get_scheduler_status()
     # next_run 可能是 datetime，需要序列化
     return status
+
+@router.post("/scheduler/max-concurrent")
+async def set_max_concurrent(payload: MaxConcurrentPayload):
+    try:
+        value = await service.set_scheduler_max_concurrent(payload.value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid max_concurrent value")
+    return {"max_concurrent": value}
+
+@router.get("/scheduler/queue")
+async def scheduler_queue(db: AsyncSession = Depends(get_db)):
+    return await service.get_scheduler_queue_status(db)
