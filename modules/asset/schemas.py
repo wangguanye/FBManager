@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field
 from datetime import datetime, date
 from typing import Optional, List
 
@@ -36,6 +36,12 @@ class BrowserWindowCreate(BrowserWindowBase):
 
 class BrowserWindow(BrowserWindowBase):
     id: int
+    synced_proxy_host: Optional[str] = None
+    synced_proxy_port: Optional[int] = None
+    synced_proxy_type: Optional[str] = None
+    synced_proxy_username: Optional[str] = None
+    remark: Optional[str] = None
+    last_synced_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 class FBAccountBrief(BaseModel):
@@ -51,9 +57,14 @@ class ProxyIPBrief(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class BrowserWindowDetail(BrowserWindow):
-    bound_account: Optional[FBAccountBrief] = Field(None, alias="fb_account")
+    synced_proxy: Optional[str] = None
+    bound_account: Optional[FBAccountBrief] = None
     bound_proxy: Optional[ProxyIPBrief] = None
-        
+    bound_account_id: Optional[int] = None
+    bound_account_name: Optional[str] = None
+    bound_proxy_id: Optional[int] = None
+    bound_proxy_display: Optional[str] = None
+    proxy_mismatch: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 class FBAccountBase(BaseModel):

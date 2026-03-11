@@ -1,7 +1,9 @@
-> **文档版本**：v3.1　　**创建日期**：2026-03-06　　**最后更新**：2026-03-08　　**作者**：王冠业
+> **文档版本**：v3.3　　**创建日期**：2026-03-06　　**最后更新**：2026-03-11　　**作者**：王冠业
 > 
 
 ---
+
+https://github.com/wangguanye/FBManager
 
 ## 一、产品概述
 
@@ -39,7 +41,7 @@
 | **数据存储** | 本地 SQLite 数据库，不关联 Notion |
 | **依赖外部服务** | 比特浏览器（同一台电脑运行）— [⿻ API接口文档](https://doc2.bitbrowser.cn/jiekou.html) |
 | **自动化引擎** | Playwright — [Playwright Python 文档](https://playwright.dev/python/docs/api/class-playwright) |
-| **开发方式** | 通过 Trae AI 模型辅助开发 |
+| **开发方式** | 通过 OpenAI Codex（GPT-5.3-Codex）辅助开发 |
 
 ### 1.6 设计原则
 
@@ -178,20 +180,27 @@ stateDiagram-v2
 
 #### 页面功能
 
-展示比特浏览器窗口列表，查看每个窗口的绑定关系和运行状态，数据从比特浏览器 API 同步。
+展示比特浏览器窗口列表，查看每个窗口的绑定关系、**代理配置**和运行状态。数据从比特浏览器 API 同步，同步时**自动读取每个窗口配置中的代理信息**并回填到本地数据库，实现窗口—代理—账号三者关系一目了然。
 
 #### UI 布局
 
 - **顶部操作栏**：「🔄 同步窗口列表」按钮 + 状态筛选下拉（全部 / 空闲 / 使用中 / 运行中 / 永久禁用）
 - **主体：窗口列表表格**
-    - 列：状态色标 | 窗口 ID | 窗口名称 | 是否运行中（绿色圆点/灰色圆点）| 绑定账号名（点击可跳转）| 操作（打开窗口 / 关闭窗口）
+    - 列：状态色标 | 窗口 ID | 窗口名称 | 是否运行中（绿色圆点/灰色圆点）| **绑定代理（host:port）** | 绑定账号名（点击可跳转）| 操作（打开窗口 / 关闭窗口 / 删除窗口）
     - 永久禁用的窗口整行红色背景
+    - **代理来源不一致提示**：若比特浏览器窗口内置的代理配置与本地 `proxy_ips` 表中该窗口绑定的代理不一致，该单元格标黄 + Tooltip「⚠️ 比特浏览器代理与本地记录不一致」
 
 #### 交互逻辑
 
-- **同步窗口列表**：点击「🔄 同步窗口列表」→ 调用比特浏览器 API 获取最新窗口数据 → 与本地库比对后更新 `GET /api/windows`
+- **同步窗口列表**（增强版）：点击「🔄 同步窗口列表」→ 执行以下流程：
+    1. 调用比特浏览器 `POST /browser/list` 获取全部窗口基础信息
+    2. **逐窗口调用 `POST /browser/detail` 获取详细配置**，读取每个窗口的代理设置（`proxyMethod`、`proxyType`、`host`、`port`、`proxyUserName`）以及备注（`remark`）等
+    3. 与本地 `browser_windows` 表比对：新增窗口→插入；已有窗口→更新 `synced_proxy_host`、`synced_proxy_port`、`synced_proxy_type` 等字段；比特浏览器中不存在的本地窗口→标记「已失联」
+    4. **自动关联检测**：对于有代理配置的窗口，按 `host:port` 在 `proxy_ips` 表中查找匹配记录；若匹配到且该代理已被某账号绑定，则自动填入「绑定代理」和「绑定账号」列
+    5. 同步完成后刷新 `GET /api/windows`，前端渲染完整表格
 - **打开窗口**：调用比特浏览器 `POST /browser/open` → 窗口状态变为「运行中」→ 按钮切换为「关闭窗口」
 - **关闭窗口**：调用比特浏览器 `POST /browser/close` → 窗口状态恢复 → 按钮切换为「打开窗口」
+- **删除窗口**：调用比特浏览器 `POST /browser/delete` 删除远端窗口 → 成功后从本地库删除 → 列表移除该行
 - **级联禁用**：同代理管理，被级联禁用时 Toast 提示
 
 ---
@@ -600,6 +609,34 @@ list_resp = requests.post(
 #         "totalNum": 10
 #     }
 # }
+# === 5. 获取窗口详情（读取代理配置） ===
+# POST /browser/detail
+detail_resp = requests.post(
+    "http://127.0.0.1:54345/browser/detail",
+    json={"id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
+)
+# 响应示例（关键字段）：
+# {
+#     "success": true,
+#     "data": {
+#         "id": "xxx",
+#         "name": "Window 1",
+#         "remark": "FB-account-01",
+#         "proxyMethod": 2,           # 0=不使用, 1=自定义, 2=提取IP
+#         "proxyType": "socks5",       # http / socks5
+#         "host": "192.168.1.100",
+#         "port": "1080",
+#         "proxyUserName": "user",
+#         "proxyPassword": "***"
+#     }
+# }
+# === 6. 删除浏览器窗口 ===
+# POST /browser/delete
+delete_resp = requests.post(
+    "http://127.0.0.1:54345/browser/delete",
+    json={"id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
+)
+# 响应：{"success": true, "data": {}}
 ```
 
 > ⏳ 完整 API 参考：[⿻ 比特浏览器 API 文档](https://doc2.bitbrowser.cn/jiekou.html)。以上示例为核心调用，`browser_client.py` 适配层应封装这些调用并统一处理错误 / 重试 / 超时。
@@ -634,6 +671,12 @@ erDiagram
         string bit_window_id
         string name
         string status
+        string synced_proxy_host
+        int synced_proxy_port
+        string synced_proxy_type
+        string synced_proxy_username
+        string remark
+        datetime last_synced_at
     }
     proxy_ips {
         int id PK
@@ -855,7 +898,7 @@ CREATE TABLE budget_changes (
 
 - SOP 规则通过 `config.yaml` 管理，不硬编码
 - RPA 原子模块通过统一接口注册，新增行为只需新增文件
-- 提供完整 `README.md` 与模块注释，方便 Trae AI 理解代码结构
+- 提供完整 `README.md` 与模块注释，方便 Codex 理解代码结构
 
 ### 8.5 数据备份与恢复
 
@@ -1145,5 +1188,5 @@ backup:
 
 ---
 
-> 📌 **文档版本**：v3.1　　**更新日期**：2026-03-08　　**更新人**：王冠业
+> 📌 **文档版本**：v3.3　　**更新日期**：2026-03-11　　**更新人**：王冠业
 >

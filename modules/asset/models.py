@@ -60,6 +60,12 @@ class BrowserWindow(Base):
     bit_window_id = Column(String, unique=True, index=True)
     name = Column(String)
     status = Column(String, default="空闲")
+    synced_proxy_host = Column(String, nullable=True)
+    synced_proxy_port = Column(Integer, nullable=True)
+    synced_proxy_type = Column(String, nullable=True)
+    synced_proxy_username = Column(String, nullable=True)
+    remark = Column(String, nullable=True)
+    last_synced_at = Column(DateTime, nullable=True)
 
     # 关系定义
     fb_account = relationship("FBAccount", back_populates="browser_window", uselist=False)
@@ -97,4 +103,3 @@ class AvatarAsset(Base):
 
     # 关系定义
     used_by_account = relationship("FBAccount", back_populates="avatar_assets")
-

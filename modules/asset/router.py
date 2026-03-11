@@ -292,7 +292,7 @@ async def delete_window(id: int, db: AsyncSession = Depends(get_db)):
 # Windows endpoints
 @router.get("/windows", response_model=List[schemas.BrowserWindowDetail], tags=["Windows"])
 async def list_windows(status: Optional[str] = None, db: AsyncSession = Depends(get_db)):
-    """列出所有浏览器窗口 (Alias for /browser-windows to match frontend requirement)"""
+    """列出所有浏览器窗口（含同步代理、绑定账号/代理、失配状态）"""
     return await service.get_browser_windows(db, status)
 
 @router.post("/windows/{id}/open", tags=["Windows"])

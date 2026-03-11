@@ -20,60 +20,69 @@
     <!-- 窗口列表表格 -->
     <div class="bg-white rounded-lg shadow overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">比特窗口 ID</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">窗口名称</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定个人账号</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定广告账户</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定代理 IP</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                <template x-for="window in windows" :key="window.id">
-                    <tr :class="{'bg-red-50': window.status === '永久禁用'}">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.id"></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono" x-text="window.bit_window_id"></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="window.name"></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <a x-show="window.fb_account" :href="'/accounts?q=' + window.fb_account.username" class="text-indigo-600 hover:text-indigo-900" x-text="window.fb_account.username"></a>
-                            <span x-show="!window.fb_account">-</span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">-</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <span x-show="window.fb_account && window.fb_account.proxy" x-text="window.fb_account.proxy.host + ':' + window.fb_account.proxy.port"></span>
-                            <span x-show="!(window.fb_account && window.fb_account.proxy)">-</span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="flex items-center gap-2">
-                                <span :class="getStatusColor(window.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-opacity-10" x-text="window.status"></span>
-                                <span x-show="window.status === '永久禁用'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-600 text-white">禁用</span>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button @click="openWindow(window)" class="text-indigo-600 hover:text-indigo-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id) || window.status === '永久禁用'" :title="window.status === '永久禁用' ? '已永久禁用' : ''">
-                                <span x-show="!processing.has(window.id)">打开</span>
-                                <span x-show="processing.has(window.id)">...</span>
-                            </button>
-                            <button x-show="window.status !== '永久禁用'" @click="closeWindow(window)" class="text-yellow-600 hover:text-yellow-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
-                                <span x-show="!processing.has(window.id)">关闭</span>
-                                <span x-show="processing.has(window.id)">...</span>
-                            </button>
-                            <button @click="deleteWindow(window)" class="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
-                                <span x-show="!processing.has(window.id)">删除</span>
-                                <span x-show="processing.has(window.id)">...</span>
-                            </button>
-                        </td>
-                    </tr>
-                </template>
-                <tr x-show="windows.length === 0">
-                    <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">暂无窗口数据，请点击同步按钮</td>
-                </tr>
-            </tbody>
-        </table>
+    <thead class="bg-gray-50">
+        <tr>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">窗口 ID</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">运行</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定代理</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">账号</th>
+            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+        </tr>
+    </thead>
+    <tbody class="bg-white divide-y divide-gray-200">
+        <template x-for="window in windows" :key="window.id">
+            <tr :class="{'bg-red-50': window.status === '永久禁用', 'bg-gray-50': window.status === '已失联'}">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center gap-2">
+                        <span :class="getStatusColor(window.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-opacity-10" x-text="window.status"></span>
+                        <span x-show="window.status === '永久禁用'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-600 text-white">禁用</span>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono" x-text="window.bit_window_id"></td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <div x-text="window.name"></div>
+                    <div x-show="window.remark" class="text-xs text-gray-500" x-text="window.remark"></div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <span x-text="window.status === '运行中' ? '是' : '否'"></span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" :class="window.proxy_mismatch ? 'bg-yellow-100' : ''">
+                    <template x-if="window.synced_proxy">
+                        <span>
+                            <span x-text="window.synced_proxy"></span>
+                            <span x-show="window.synced_proxy_type" class="text-xs text-gray-400" x-text="` (${window.synced_proxy_type})`"></span>
+                            <span x-show="window.proxy_mismatch" title="⚠️ 比特浏览器代理与本地记录不一致" class="text-yellow-600 ml-1">⚠️</span>
+                        </span>
+                    </template>
+                    <span x-show="!window.synced_proxy" class="text-gray-400">未配置</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <a x-show="window.bound_account" :href="'/accounts?q=' + window.bound_account.username" class="text-indigo-600 hover:text-indigo-900" x-text="window.bound_account.username"></a>
+                    <span x-show="!window.bound_account">-</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button @click="openWindow(window)" class="text-indigo-600 hover:text-indigo-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id) || window.status === '永久禁用'" :title="window.status === '永久禁用' ? '已永久禁用' : ''">
+                        <span x-show="!processing.has(window.id)">打开</span>
+                        <span x-show="processing.has(window.id)">...</span>
+                    </button>
+                    <button x-show="window.status !== '永久禁用'" @click="closeWindow(window)" class="text-yellow-600 hover:text-yellow-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                        <span x-show="!processing.has(window.id)">关闭</span>
+                        <span x-show="processing.has(window.id)">...</span>
+                    </button>
+                    <button @click="deleteWindow(window)" class="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                        <span x-show="!processing.has(window.id)">删除</span>
+                        <span x-show="processing.has(window.id)">...</span>
+                    </button>
+                </td>
+            </tr>
+        </template>
+        <tr x-show="windows.length === 0">
+            <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">暂无窗口数据，请点击同步按钮</td>
+        </tr>
+    </tbody>
+</table>
     </div>
 </div>
 
@@ -103,7 +112,7 @@
                     
                     if (response.ok) {
                         // 成功
-                        alert(`同步成功！新增 ${result.data.new_count} 个窗口，共同步 ${result.data.synced_count} 个。`);
+                        alert(`同步成功！新增 ${result.data.new_count ?? 0} 个窗口，共同步 ${result.data.synced_count ?? 0} 个，已失联 ${result.data.lost_count ?? 0} 个。`);
                         this.fetchWindows();
                     } else {
                         // 失败
@@ -201,6 +210,7 @@
                     case '使用中': return 'text-blue-800 bg-blue-100';
                     case '异常': return 'text-yellow-800 bg-yellow-100';
                     case '永久禁用': return 'text-red-800 bg-red-100';
+                    case '已失联': return 'text-gray-800 bg-gray-200';
                     default: return 'text-gray-800 bg-gray-100';
                 }
             }

@@ -7,7 +7,7 @@ from loguru import logger
 import yaml
 import os
 
-from db.database import engine, Base
+from db.database import engine, Base, ensure_browser_window_columns
 from modules.asset.router import router as asset_router
 from modules.ad.router import router as ad_router
 from modules.monitor.router import router as monitor_router
@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
     logger.info("正在初始化数据库表...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    ensure_browser_window_columns()
     logger.info("数据库初始化完成")
 
     # 执行系统维护任务
