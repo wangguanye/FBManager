@@ -34,6 +34,7 @@ class ActionLog(ActionLogBase):
     id: int
     is_dismissed: bool = False
     created_at: datetime
+    result_log: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class Alert(BaseModel):

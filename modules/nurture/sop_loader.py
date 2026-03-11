@@ -1,3 +1,4 @@
+# FIX-9 done
 import yaml
 import os
 from loguru import logger
@@ -14,26 +15,19 @@ def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+def load_sop_config() -> list[dict]:
+    config = load_config()
+    sop_config = config.get("nurture_sop", [])
+    if isinstance(sop_config, list):
+        return sop_config
+    return []
+
 def load_sop_for_day(day_number: int) -> dict:
     assert day_number > 0
-    config = load_config()
-    sop_config = config.get("nurture_sop", {})
-    days_config = sop_config.get("days", {})
-    day_config = None
-
-    if day_number in days_config:
-        day_config = days_config.get(day_number)
-    elif str(day_number) in days_config:
-        day_config = days_config.get(str(day_number))
-
+    days = load_sop_config()
+    day_config = next((item for item in days if item.get("day") == day_number), None)
     if not day_config:
-        for config_item in days_config.values():
-            if isinstance(config_item, dict) and config_item.get("is_default") is True:
-                day_config = config_item
-                break
-
-    if not day_config:
-        day_config = sop_config.get("default")
+        day_config = next((item for item in days if item.get("is_default") is True), None)
 
     if not day_config:
         day_config = {"online_minutes": 0, "once_tasks": [], "daily_tasks": []}

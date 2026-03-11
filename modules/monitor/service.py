@@ -82,7 +82,9 @@ async def get_action_logs(
     keyword: Optional[str] = None
 ):
     """获取操作日志，支持筛选"""
-    query = select(ActionLog).order_by(desc(ActionLog.created_at))
+    query = select(ActionLog, NurtureTask.result_log).outerjoin(
+        NurtureTask, ActionLog.task_id == NurtureTask.id
+    ).order_by(desc(ActionLog.created_at))
     
     if account_id:
         query = query.where(ActionLog.fb_account_id == account_id)
@@ -106,7 +108,20 @@ async def get_action_logs(
         
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    logs = []
+    for log, result_log in result.all():
+        logs.append({
+            "id": log.id,
+            "fb_account_id": log.fb_account_id,
+            "task_id": log.task_id,
+            "action_type": log.action_type,
+            "level": log.level,
+            "message": log.message,
+            "is_dismissed": log.is_dismissed,
+            "created_at": log.created_at,
+            "result_log": result_log
+        })
+    return logs
 
 async def create_alert(db: AsyncSession, fb_account_id: Optional[int], level: str, title: str, message: str) -> Alert | None:
     stmt_exist = select(Alert.id).where(

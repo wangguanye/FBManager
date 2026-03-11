@@ -1,3 +1,4 @@
+# FIX-11 done
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,24 +32,10 @@ async def preview_accounts_import(content: str = Form(...)):
     result = await service.preview_accounts_csv(content)
     return {"code": 0, "data": result, "msg": ""}
 
-@router.post("/accounts/import/confirm")
-async def confirm_accounts_import(payload: schemas.AccountCsvImportConfirm, db: AsyncSession = Depends(get_db)):
-    rows = [row.model_dump() for row in payload.rows]
-    options = payload.options.model_dump()
-    result = await service.confirm_accounts_csv_import(db, rows, options)
-    return {"code": 0, "data": result, "msg": ""}
-
 @router.post("/accounts/import/csv")
 async def preview_accounts_csv(file: UploadFile = File(...)):
     content = (await file.read()).decode("utf-8", errors="ignore")
     result = await service.preview_accounts_csv(content)
-    return {"code": 0, "data": result, "msg": ""}
-
-@router.post("/accounts/import/csv/confirm")
-async def confirm_accounts_csv(payload: schemas.AccountCsvImportConfirm, db: AsyncSession = Depends(get_db)):
-    rows = [row.model_dump() for row in payload.rows]
-    options = payload.options.model_dump()
-    result = await service.confirm_accounts_csv_import(db, rows, options)
     return {"code": 0, "data": result, "msg": ""}
 
 @router.get("/accounts/import/template")
@@ -174,24 +161,10 @@ async def preview_proxies_import(content: str = Form(...)):
     result = await service.preview_proxies_csv(content)
     return {"code": 0, "data": result, "msg": ""}
 
-@router.post("/proxies/import/confirm", tags=["Proxies"])
-async def confirm_proxies_import(payload: schemas.ProxyCsvImportConfirm, db: AsyncSession = Depends(get_db)):
-    rows = [row.model_dump() for row in payload.rows]
-    options = payload.options.model_dump()
-    result = await service.confirm_proxies_csv_import(db, rows, options)
-    return {"code": 0, "data": result, "msg": ""}
-
 @router.post("/proxies/import/csv", tags=["Proxies"])
 async def preview_proxies_csv(file: UploadFile = File(...)):
     content = (await file.read()).decode("utf-8", errors="ignore")
     result = await service.preview_proxies_csv(content)
-    return {"code": 0, "data": result, "msg": ""}
-
-@router.post("/proxies/import/csv/confirm", tags=["Proxies"])
-async def confirm_proxies_csv(payload: schemas.ProxyCsvImportConfirm, db: AsyncSession = Depends(get_db)):
-    rows = [row.model_dump() for row in payload.rows]
-    options = payload.options.model_dump()
-    result = await service.confirm_proxies_csv_import(db, rows, options)
     return {"code": 0, "data": result, "msg": ""}
 
 @router.get("/proxies/import/template", tags=["Proxies"])

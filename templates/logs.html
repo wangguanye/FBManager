@@ -1,3 +1,4 @@
+<!-- FIX-10 done -->
 {% extends "base.html" %}
 
 {% block content %}
@@ -45,6 +46,10 @@
                         <input type="checkbox" value="ERROR" x-model="filters.levels" @change="resetAndFetch()" class="rounded border-gray-300 text-red-600 shadow-sm focus:border-red-300 focus:ring focus:ring-red-200 focus:ring-opacity-50">
                         <span class="ml-1 text-sm text-gray-700">ERROR</span>
                     </label>
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" value="CRITICAL" x-model="filters.levels" @change="resetAndFetch()" class="rounded border-gray-300 text-red-600 shadow-sm focus:border-red-300 focus:ring focus:ring-red-200 focus:ring-opacity-50">
+                        <span class="ml-1 text-sm px-1 rounded bg-red-600 text-white">CRITICAL</span>
+                    </label>
                 </div>
             </div>
             <!-- 搜索框 -->
@@ -70,7 +75,7 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
                 <template x-for="log in logs" :key="log.id">
-                    <tr class="hover:bg-gray-50">
+                    <tr class="hover:bg-gray-50 cursor-pointer" @click="toggleExpand(log.id)">
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(log.created_at)"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="log.fb_account_id || '-'"></td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="log.task_id || '-'"></td>
@@ -87,6 +92,24 @@
                             </span>
                         </td>
                         <td class="px-6 py-4 text-sm text-gray-900 break-all" x-text="log.message"></td>
+                    </tr>
+                    <tr x-show="expandedLogId === log.id" class="bg-gray-50">
+                        <td colspan="6" class="px-6 py-4 text-sm text-gray-700">
+                            <div class="grid grid-cols-1 gap-4">
+                                <div>
+                                    <div class="text-xs text-gray-500 mb-1">result_log</div>
+                                    <pre class="whitespace-pre-wrap break-words bg-white border border-gray-200 rounded p-3 text-xs text-gray-800" x-text="log.result_log || '-'"></pre>
+                                </div>
+                                <div>
+                                    <div class="text-xs text-gray-500 mb-1">完整 message</div>
+                                    <div class="text-sm text-gray-800 break-words" x-text="log.message"></div>
+                                </div>
+                                <div>
+                                    <div class="text-xs text-gray-500 mb-1">任务链接</div>
+                                    <a class="text-indigo-600 hover:text-indigo-800 underline" :href="`/tasks?task_id=${log.task_id}`" x-text="log.task_id ? `任务 ${log.task_id}` : '-'"></a>
+                                </div>
+                            </div>
+                        </td>
                     </tr>
                 </template>
                 <tr x-show="logs.length === 0 && !loading">
@@ -120,6 +143,7 @@ function logs() {
         loading: false,
         hasMore: true,
         observer: null,
+        expandedLogId: null,
 
         init() {
             this.fetchAccounts();
@@ -168,6 +192,7 @@ function logs() {
                         this.logs = [...this.logs, ...newLogs];
                     } else {
                         this.logs = newLogs;
+                        this.expandedLogId = null;
                     }
                     this.hasMore = newLogs.length === this.size;
                 }
@@ -182,6 +207,7 @@ function logs() {
             this.page = 1;
             this.hasMore = true;
             this.logs = [];
+            this.expandedLogId = null;
             this.fetchLogs();
         },
 
@@ -199,6 +225,14 @@ function logs() {
             if (!dateStr) return '-';
             const date = new Date(dateStr);
             return date.toLocaleString('zh-CN', { hour12: false });
+        },
+
+        toggleExpand(logId) {
+            if (this.expandedLogId === logId) {
+                this.expandedLogId = null;
+                return;
+            }
+            this.expandedLogId = logId;
         }
     }
 }
