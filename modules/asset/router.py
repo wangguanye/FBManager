@@ -293,7 +293,66 @@ async def delete_window(id: int, db: AsyncSession = Depends(get_db)):
 @router.get("/windows", response_model=List[schemas.BrowserWindowDetail], tags=["Windows"])
 async def list_windows(status: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """列出所有浏览器窗口（含同步代理、绑定账号/代理、失配状态）"""
-    return await service.get_browser_windows(db, status)
+    windows = await service.get_browser_windows(db, status)
+    payload = []
+    for w in windows:
+        bound_account = None
+        if w.fb_account and not w.fb_account.is_deleted:
+            bound_account = {
+                "id": w.fb_account.id,
+                "username": w.fb_account.username,
+                "status": w.fb_account.status,
+            }
+
+        bound_proxy = None
+        if w.fb_account and not w.fb_account.is_deleted and w.fb_account.proxy:
+            bound_proxy = {
+                "id": w.fb_account.proxy.id,
+                "host": w.fb_account.proxy.host,
+                "port": w.fb_account.proxy.port,
+            }
+
+        synced_proxy = None
+        if w.synced_proxy_host:
+            if w.synced_proxy_port is not None:
+                synced_proxy = f"{w.synced_proxy_host}:{w.synced_proxy_port}"
+            else:
+                synced_proxy = w.synced_proxy_host
+
+        proxy_mismatch = (
+            w.synced_proxy_host is not None
+            and w.fb_account is not None
+            and not w.fb_account.is_deleted
+            and w.fb_account.proxy is not None
+            and (
+                w.synced_proxy_host != w.fb_account.proxy.host
+                or w.synced_proxy_port != w.fb_account.proxy.port
+            )
+        )
+
+        payload.append(
+            {
+                "id": w.id,
+                "bit_window_id": w.bit_window_id,
+                "name": w.name,
+                "status": w.status,
+                "synced_proxy_host": w.synced_proxy_host,
+                "synced_proxy_port": w.synced_proxy_port,
+                "synced_proxy_type": w.synced_proxy_type,
+                "synced_proxy_username": w.synced_proxy_username,
+                "synced_proxy": synced_proxy,
+                "remark": w.remark,
+                "last_synced_at": w.last_synced_at.isoformat() if w.last_synced_at else None,
+                "bound_account": bound_account,
+                "bound_proxy": bound_proxy,
+                "bound_account_id": bound_account["id"] if bound_account else None,
+                "bound_account_name": bound_account["username"] if bound_account else None,
+                "bound_proxy_id": bound_proxy["id"] if bound_proxy else None,
+                "bound_proxy_display": f"{bound_proxy['host']}:{bound_proxy['port']}" if bound_proxy else None,
+                "proxy_mismatch": proxy_mismatch,
+            }
+        )
+    return payload
 
 @router.post("/windows/{id}/open", tags=["Windows"])
 async def open_window(id: int, db: AsyncSession = Depends(get_db)):

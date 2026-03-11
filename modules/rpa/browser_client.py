@@ -20,7 +20,7 @@ class BitBrowserClient:
             response.raise_for_status()
             res_json = response.json()
             if not res_json.get("success", True):
-                # Some BitBrowser APIs return success=false with HTTP 200.
+                # 有些 API 返回 success 字段，保持与历史逻辑一致
                 pass
             return res_json
         except httpx.RequestError as e:
@@ -30,17 +30,14 @@ class BitBrowserClient:
             logger.error(f"BitBrowser API error: {e.response.text}")
             raise Exception(f"BitBrowser API Error: {e.response.text}")
 
-    async def _post(self, endpoint: str, payload: Dict[str, Any]) -> Any:
-        return await self._request("POST", endpoint, json=payload)
-
     async def open_browser(self, profile_id: str) -> Dict[str, str]:
-        """POST /browser/open, body={id,args,loadExtensions}"""
+        """POST /browser/open，body={id,args,loadExtensions}"""
         payload = {
             "id": profile_id,
             "args": [],
             "loadExtensions": True,
         }
-        res = await self._post("/browser/open", payload)
+        res = await self._request("POST", "/browser/open", json=payload)
         data = res.get("data", {})
         return {
             "ws": data.get("ws"),
@@ -48,29 +45,18 @@ class BitBrowserClient:
         }
 
     async def close_browser(self, profile_id: str) -> bool:
-        """POST /browser/close, body={id}"""
+        """POST /browser/close，body={id}"""
         payload = {"id": profile_id}
-        await self._post("/browser/close", payload)
+        await self._request("POST", "/browser/close", json=payload)
         return True
-
-    async def delete_browser(self, profile_id: str) -> bool:
-        """POST /browser/delete 删除比特浏览器窗口"""
-        payload = {"id": profile_id}
-        await self._post("/browser/delete", payload)
-        return True
-
-    async def get_browser_detail(self, profile_id: str) -> Dict[str, Any]:
-        """Get detailed profile info including proxy config from BitBrowser."""
-        resp = await self._post("/browser/detail", {"id": profile_id})
-        return resp.get("data", {}) if isinstance(resp, dict) else {}
 
     async def list_browsers(self, page: int = 0, page_size: int = 100) -> List[Dict[str, Any]]:
-        """POST /browser/list, body={page,pageSize}"""
+        """POST /browser/list，body={page,pageSize}"""
         payload = {
             "page": page,
             "pageSize": page_size,
         }
-        res = await self._post("/browser/list", payload)
+        res = await self._request("POST", "/browser/list", json=payload)
         data = res.get("data", {})
         if isinstance(data, dict):
             return data.get("list", [])
@@ -84,3 +70,22 @@ class BitBrowserClient:
                 return True
         except Exception:
             return False
+
+    async def get_browser_detail(self, profile_id: str) -> dict:
+        """GET single window detail including proxy config.
+        POST /browser/detail  body: {"id": profile_id}
+        Returns dict with: id, name, remark, proxyMethod, proxyType, host, port, proxyUserName
+        """
+        try:
+            res = await self._request("POST", "/browser/detail", json={"id": profile_id})
+            return res.get("data", {})
+        except Exception as e:
+            logger.warning(f"get_browser_detail failed for {profile_id}: {e}")
+            return {}
+
+    async def delete_browser(self, profile_id: str) -> bool:
+        """Delete a browser window.
+        POST /browser/delete  body: {"id": profile_id}
+        """
+        await self._request("POST", "/browser/delete", json={"id": profile_id})
+        return True

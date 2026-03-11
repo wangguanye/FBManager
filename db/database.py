@@ -1,3 +1,4 @@
+import sqlite3
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import create_engine
@@ -34,8 +35,12 @@ async def get_db():
 # 用于同步操作的引擎（可选）
 sync_engine = create_engine("sqlite:///./fb_manager.db")
 
-def ensure_browser_window_columns() -> None:
-    """Ensure browser_windows has sync-related columns in existing SQLite DBs."""
+
+def ensure_browser_window_columns(db_path: str = "./fb_manager.db"):
+    """Auto-add new columns to browser_windows if they don't exist yet."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    existing = [row[1] for row in cursor.execute("PRAGMA table_info(browser_windows)")]
     new_cols = {
         "synced_proxy_host": "TEXT",
         "synced_proxy_port": "INTEGER",
@@ -44,11 +49,9 @@ def ensure_browser_window_columns() -> None:
         "remark": "TEXT",
         "last_synced_at": "DATETIME",
     }
-    with sync_engine.begin() as conn:
-        table_info = conn.exec_driver_sql("PRAGMA table_info(browser_windows)").fetchall()
-        if not table_info:
-            return
-        existing_cols = {row[1] for row in table_info}
-        for col, col_type in new_cols.items():
-            if col not in existing_cols:
-                conn.exec_driver_sql(f"ALTER TABLE browser_windows ADD COLUMN {col} {col_type}")
+    for col_name, col_type in new_cols.items():
+        if col_name not in existing:
+            cursor.execute(f"ALTER TABLE browser_windows ADD COLUMN {col_name} {col_type}")
+    conn.commit()
+    conn.close()
+

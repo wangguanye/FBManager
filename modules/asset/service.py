@@ -9,7 +9,6 @@ from modules.ad.models import BMAccount, AdAccount, Fanpage
 from core.crypto import encrypt_value
 from core.cascade import cascade_on_ban, cascade_on_recovery
 from fastapi import HTTPException
-from loguru import logger
 from modules.rpa.browser_client import BitBrowserClient, BitBrowserNotRunningError
 from datetime import datetime
 import os
@@ -312,62 +311,6 @@ async def create_browser_window(db: AsyncSession, window: BrowserWindowCreate):
     await db.flush()
     return db_window
 
-def _build_browser_window_detail(window: BrowserWindow) -> Dict[str, Any]:
-    bound_account_obj = window.fb_account if window.fb_account and not window.fb_account.is_deleted else None
-    bound_proxy_obj = bound_account_obj.proxy if bound_account_obj else None
-
-    synced_proxy = None
-    if window.synced_proxy_host:
-        synced_proxy = (
-            f"{window.synced_proxy_host}:{window.synced_proxy_port}"
-            if window.synced_proxy_port is not None
-            else window.synced_proxy_host
-        )
-
-    bound_account = None
-    if bound_account_obj:
-        bound_account = {
-            "id": bound_account_obj.id,
-            "username": bound_account_obj.username,
-            "status": bound_account_obj.status,
-        }
-
-    bound_proxy = None
-    bound_proxy_display = None
-    if bound_proxy_obj:
-        bound_proxy = {
-            "id": bound_proxy_obj.id,
-            "host": bound_proxy_obj.host,
-            "port": bound_proxy_obj.port,
-        }
-        bound_proxy_display = f"{bound_proxy_obj.host}:{bound_proxy_obj.port}"
-
-    proxy_mismatch = False
-    if window.synced_proxy_host and bound_proxy_obj:
-        proxy_mismatch = (
-            window.synced_proxy_host != bound_proxy_obj.host
-            or window.synced_proxy_port != bound_proxy_obj.port
-        )
-
-    return {
-        "id": window.id,
-        "bit_window_id": window.bit_window_id,
-        "name": window.name,
-        "status": window.status,
-        "synced_proxy": synced_proxy,
-        "synced_proxy_type": window.synced_proxy_type,
-        "remark": window.remark,
-        "bound_account": bound_account,
-        "bound_proxy": bound_proxy,
-        "bound_account_id": bound_account_obj.id if bound_account_obj else None,
-        "bound_account_name": bound_account_obj.username if bound_account_obj else None,
-        "bound_proxy_id": bound_proxy_obj.id if bound_proxy_obj else None,
-        "bound_proxy_display": bound_proxy_display,
-        "proxy_mismatch": proxy_mismatch,
-        "last_synced_at": window.last_synced_at,
-    }
-
-
 async def get_browser_windows(db: AsyncSession, status: str = None):
     """获取所有浏览器窗口"""
     stmt = select(BrowserWindow).options(
@@ -377,118 +320,107 @@ async def get_browser_windows(db: AsyncSession, status: str = None):
         stmt = stmt.where(BrowserWindow.status == status)
     stmt = stmt.order_by(BrowserWindow.id.desc())
     result = await db.execute(stmt)
-    windows = result.scalars().all()
-    return [_build_browser_window_detail(window) for window in windows]
+    return result.scalars().all()
+
 
 async def sync_browser_windows(db: AsyncSession):
-    """同步比特浏览器窗口"""
+    """同步比特浏览器窗口 — 增强版：逐窗口读取代理配置"""
     client = BitBrowserClient()
 
     is_alive = await client.check_alive()
     if not is_alive:
         raise BitBrowserNotRunningError("BitBrowser is not running")
 
+    # Step 1: paginated list
     page = 0
     page_size = 50
     all_windows = []
-
     while True:
-        windows = await client.list_browsers(page=page, page_size=page_size)
-        if not windows:
+        batch = await client.list_browsers(page=page, page_size=page_size)
+        if not batch:
             break
-        all_windows.extend(windows)
-        if len(windows) < page_size:
+        all_windows.extend(batch)
+        if len(batch) < page_size:
             break
         page += 1
 
-    synced_ids = set()
     synced_count = 0
     new_count = 0
-    detail_failed_count = 0
+    remote_ids = set()
 
     for w in all_windows:
-        bit_id = str(w.get("id") or "").strip()
+        bit_id = str(w.get("id")).strip() if w.get("id") is not None else ""
         if not bit_id:
             continue
+        remote_ids.add(bit_id)
 
-        detail = {}
-        detail_loaded = False
-        try:
-            detail = await client.get_browser_detail(bit_id)
-            if not isinstance(detail, dict):
-                detail = {}
-            detail_loaded = True
-        except Exception as exc:
-            detail_failed_count += 1
-            logger.warning(f"Failed to load BitBrowser detail for {bit_id}: {exc}")
+        # Step 2: get detail (proxy config) for each window
+        detail = await client.get_browser_detail(bit_id)
 
+        name = detail.get("name") or w.get("name", "Unknown")
+        proxy_method = detail.get("proxyMethod", 0)
+
+        # Extract proxy fields only if proxyMethod != 0
+        proxy_host = detail.get("host") or None
+        proxy_port = None
+        if detail.get("port"):
+            try:
+                proxy_port = int(detail["port"])
+            except (ValueError, TypeError):
+                proxy_port = None
+        proxy_type = detail.get("proxyType") or None
+        proxy_username = detail.get("proxyUserName") or None
+        remark = detail.get("remark") or None
+
+        if proxy_method == 0:
+            proxy_host = proxy_port = proxy_type = proxy_username = None
+
+        # Step 3: upsert
         stmt = select(BrowserWindow).where(BrowserWindow.bit_window_id == bit_id)
         result = await db.execute(stmt)
         db_window = result.scalar_one_or_none()
 
-        resolved_name = detail.get("name") or w.get("name") or "Unknown"
-        now = datetime.utcnow()
-
         if db_window:
-            db_window.name = resolved_name
-            if detail_loaded:
-                db_window.remark = detail.get("remark")
+            if db_window.status == "已失联":
+                db_window.status = "空闲"
+            db_window.name = name
+            db_window.synced_proxy_host = proxy_host
+            db_window.synced_proxy_port = proxy_port
+            db_window.synced_proxy_type = proxy_type
+            db_window.synced_proxy_username = proxy_username
+            db_window.remark = remark
+            db_window.last_synced_at = datetime.utcnow()
+            db.add(db_window)
         else:
-            db_window = BrowserWindow(
+            new_window = BrowserWindow(
                 bit_window_id=bit_id,
-                name=resolved_name,
+                name=name,
                 status="空闲",
-                remark=detail.get("remark") if detail_loaded else None,
+                synced_proxy_host=proxy_host,
+                synced_proxy_port=proxy_port,
+                synced_proxy_type=proxy_type,
+                synced_proxy_username=proxy_username,
+                remark=remark,
+                last_synced_at=datetime.utcnow(),
             )
+            db.add(new_window)
             new_count += 1
 
-        if detail_loaded:
-            proxy_method = detail.get("proxyMethod", 0)
-            try:
-                proxy_method = int(proxy_method)
-            except (TypeError, ValueError):
-                proxy_method = 0
-
-            if proxy_method != 0:
-                db_window.synced_proxy_host = detail.get("host")
-                port_value = detail.get("port")
-                try:
-                    db_window.synced_proxy_port = int(port_value) if port_value not in (None, "") else None
-                except (TypeError, ValueError):
-                    db_window.synced_proxy_port = None
-                db_window.synced_proxy_type = detail.get("proxyType")
-                db_window.synced_proxy_username = detail.get("proxyUserName")
-            else:
-                db_window.synced_proxy_host = None
-                db_window.synced_proxy_port = None
-                db_window.synced_proxy_type = None
-                db_window.synced_proxy_username = None
-
-        if db_window.status == "已失联":
-            db_window.status = "空闲"
-
-        db_window.last_synced_at = now
-        db.add(db_window)
-
-        synced_ids.add(bit_id)
         synced_count += 1
 
+    # Step 4: mark local-only windows as "已失联"
+    all_local_stmt = select(BrowserWindow)
+    all_local_result = await db.execute(all_local_stmt)
     lost_count = 0
-    local_result = await db.execute(select(BrowserWindow))
-    for local_win in local_result.scalars().all():
-        if local_win.bit_window_id and local_win.bit_window_id not in synced_ids:
+    for local_win in all_local_result.scalars():
+        if local_win.bit_window_id not in remote_ids and local_win.status != "永久禁用":
             local_win.status = "已失联"
             db.add(local_win)
             lost_count += 1
 
-    await db.commit()
-    return {
-        "synced_count": synced_count,
-        "new_count": new_count,
-        "lost_count": lost_count,
-        "detail_failed_count": detail_failed_count,
-        "total_local": synced_count + lost_count,
-    }
+    await db.flush()
+    return {"synced_count": synced_count, "new_count": new_count, "lost_count": lost_count}
+
 
 async def open_browser_window(db: AsyncSession, window_id: int):
     """打开浏览器窗口"""
@@ -1149,3 +1081,5 @@ async def release_avatar(db: AsyncSession, account_id: int):
         avatar.used_by_account_id = None
         db.add(avatar)
     await db.commit()
+
+
