@@ -848,6 +848,15 @@ async def delete_browser_window(db: AsyncSession, window_id: int):
     if bound_account:
         raise HTTPException(status_code=400, detail=f"该窗口仍被账号 {bound_account.username} 绑定，请先解绑")
         
+    if window.bit_window_id:
+        client = BitBrowserClient()
+        try:
+            await client.delete_browser(window.bit_window_id)
+        except BitBrowserNotRunningError:
+            raise HTTPException(status_code=503, detail="\u6bd4\u7279\u6d4f\u89c8\u5668\u672a\u8fd0\u884c\uff0c\u65e0\u6cd5\u5220\u9664\u7a97\u53e3")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"\u6bd4\u7279\u6d4f\u89c8\u5668\u5220\u9664\u5931\u8d25: {str(e)}")
+
     await db.delete(window)
     await db.commit()
     return True

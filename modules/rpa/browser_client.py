@@ -76,6 +76,12 @@ class BitBrowserClient:
         await self._request("POST", "/browser/close", json=payload)
         return True
 
+    async def delete_browser(self, profile_id: str) -> bool:
+        """POST /browser/delete \u5220\u9664\u6bd4\u7279\u6d4f\u89c8\u5668\u7a97\u53e3"""
+        payload = {"id": profile_id}
+        await self._request("POST", "/browser/delete", json=payload)
+        return True
+
     async def list_browsers(self, page=0, page_size=100) -> List[Dict]:
         """POST /browser/list，body={page, pageSize}"""
         payload = {
