@@ -474,7 +474,10 @@ async def sync_browser_windows(db: AsyncSession):
         if db_window:
             if db_window.status == WINDOW_STATUS_LOST:
                 db_window.status = WINDOW_STATUS_IDLE
-            if db_window.status == WINDOW_STATUS_RUNNING:
+            if is_running:
+                if db_window.status not in (WINDOW_STATUS_BANNED, WINDOW_STATUS_LOST):
+                    db_window.status = WINDOW_STATUS_RUNNING
+            elif db_window.status == WINDOW_STATUS_RUNNING:
                 has_binding = await _has_active_binding(db, db_window.id)
                 db_window.status = WINDOW_STATUS_IN_USE if has_binding else WINDOW_STATUS_IDLE
 
@@ -492,7 +495,7 @@ async def sync_browser_windows(db: AsyncSession):
             new_window = BrowserWindow(
                 bit_window_id=bit_id,
                 name=name,
-                status=WINDOW_STATUS_IDLE,
+                status=WINDOW_STATUS_RUNNING if is_running else WINDOW_STATUS_IDLE,
                 synced_proxy_host=proxy_host,
                 synced_proxy_port=proxy_port,
                 synced_proxy_type=proxy_type,
@@ -536,7 +539,7 @@ async def sync_browser_windows(db: AsyncSession):
         account = matching_account.scalar_one_or_none()
         if account and account.browser_window_id is None:
             account.browser_window_id = win.id
-            if win.status not in (WINDOW_STATUS_BANNED, WINDOW_STATUS_LOST):
+            if not win.is_running and win.status not in (WINDOW_STATUS_BANNED, WINDOW_STATUS_LOST):
                 win.status = WINDOW_STATUS_IN_USE
                 db.add(win)
             auto_bound_count += 1
@@ -589,9 +592,8 @@ async def open_browser_window(db: AsyncSession, window_id: int):
     try:
         res = await client.open_browser(window.bit_window_id)
         window.is_running = True
-        if window.status == WINDOW_STATUS_RUNNING:
-            has_binding = await _has_active_binding(db, window.id)
-            window.status = WINDOW_STATUS_IN_USE if has_binding else WINDOW_STATUS_IDLE
+        if window.status not in (WINDOW_STATUS_BANNED, WINDOW_STATUS_LOST):
+            window.status = WINDOW_STATUS_RUNNING
         db.add(window)
         await db.flush()
         return res
