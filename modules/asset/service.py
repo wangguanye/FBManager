@@ -7,7 +7,12 @@ from modules.health.models import HealthScore
 from modules.asset.schemas import FBAccountCreate, FBAccountUpdate, FBAccountBind, ProxyIPCreate, ProxyIPUpdate, BrowserWindowCreate, CommentCreate
 from modules.ad.models import BMAccount, AdAccount, Fanpage
 from core.crypto import encrypt_value
-from core.cascade import cascade_on_ban, cascade_on_recovery
+from core.cascade import (
+    cascade_on_ban,
+    cascade_on_recovery,
+    cascade_on_proxy_disabled,
+    cascade_on_window_disabled,
+)
 from fastapi import HTTPException
 from modules.rpa.browser_client import BitBrowserClient, BitBrowserNotRunningError
 from datetime import datetime
@@ -276,11 +281,16 @@ async def get_proxies(db: AsyncSession, status: str = None, q: str = None):
     return result.scalars().all()
 
 async def update_proxy(db: AsyncSession, proxy_id: int, update_data: ProxyIPUpdate):
-    """更新代理 IP"""
+    """Update proxy and trigger reverse cascade when permanently disabled."""
     proxy = await db.get(ProxyIP, proxy_id)
     if not proxy:
         return None
-        
+
+    old_status = proxy.status
+    cascade_result = None
+    proxy_disabled_status = "\u6c38\u4e45\u7981\u7528"
+    mutable_statuses = {"\u7a7a\u95f2", "\u4f7f\u7528\u4e2d"}
+
     if update_data.host is not None:
         proxy.host = update_data.host
     if update_data.port is not None:
@@ -294,14 +304,21 @@ async def update_proxy(db: AsyncSession, proxy_id: int, update_data: ProxyIPUpda
     if update_data.type is not None:
         proxy.type = update_data.type
     if update_data.status is not None:
-        if proxy.status == "永久禁用" and update_data.status in ["空闲", "使用中"]:
-            raise HTTPException(status_code=400, detail="永久禁用的代理不可恢复为空闲或使用中")
+        if proxy.status == proxy_disabled_status and update_data.status in mutable_statuses:
+            raise HTTPException(status_code=400, detail="\u6c38\u4e45\u7981\u7528\u7684\u4ee3\u7406\u4e0d\u53ef\u6062\u590d\u4e3a\u7a7a\u95f2\u6216\u4f7f\u7528\u4e2d")
         proxy.status = update_data.status
-        
+
     db.add(proxy)
+
+    if proxy.status == proxy_disabled_status and old_status != proxy_disabled_status:
+        cascade_result = await cascade_on_proxy_disabled(proxy.id, db)
+
     await db.flush()
     await db.refresh(proxy)
-    return proxy
+    return {
+        "proxy": proxy,
+        "cascade": cascade_result if cascade_result and cascade_result.get("cascaded") else None,
+    }
 
 async def create_browser_window(db: AsyncSession, window: BrowserWindowCreate):
     """创建浏览器窗口"""
@@ -626,6 +643,40 @@ async def close_browser_window(db: AsyncSession, window_id: int):
     db.add(window)
     await db.flush()
     return True
+
+
+
+async def update_window_status(db: AsyncSession, window_id: int, status: str):
+    """Update window status and trigger reverse cascade when permanently disabled."""
+    stmt = select(BrowserWindow).where(BrowserWindow.id == window_id)
+    result = await db.execute(stmt)
+    window = result.scalar_one_or_none()
+    if not window:
+        return None
+
+    old_status = window.status
+    cascade_result = None
+
+    if old_status == WINDOW_STATUS_BANNED and status in (WINDOW_STATUS_IDLE, WINDOW_STATUS_IN_USE, WINDOW_STATUS_RUNNING):
+        raise HTTPException(status_code=400, detail="\u5df2\u6c38\u4e45\u7981\u7528\u7684\u7a97\u53e3\u4e0d\u53ef\u6062\u590d")
+
+    window.status = status
+    if status == WINDOW_STATUS_BANNED:
+        window.is_running = False
+    elif status == WINDOW_STATUS_RUNNING:
+        window.is_running = True
+
+    db.add(window)
+
+    if status == WINDOW_STATUS_BANNED and old_status != WINDOW_STATUS_BANNED:
+        cascade_result = await cascade_on_window_disabled(window.id, db)
+
+    await db.flush()
+    await db.refresh(window)
+    return {
+        "window": window,
+        "cascade": cascade_result if cascade_result and cascade_result.get("cascaded") else None,
+    }
 
 ACCOUNT_HEADERS = ("username", "password", "totp_secret", "email", "email_password", "cookie", "browser_profile_id")
 ACCOUNT_REQUIRED_FIELDS = ("username", "password", "email", "email_password")
@@ -1240,5 +1291,3 @@ async def release_avatar(db: AsyncSession, account_id: int):
         avatar.used_by_account_id = None
         db.add(avatar)
     await db.commit()
-
-

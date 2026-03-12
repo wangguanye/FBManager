@@ -464,8 +464,19 @@
             async saveProxy() {
                 const url = this.isEdit ? `/api/proxies/${this.form.id}` : '/api/proxies';
                 const method = this.isEdit ? 'PATCH' : 'POST';
-                
-                // Construct payload
+
+                const disabledStatus = '\u6c38\u4e45\u7981\u7528';
+                if (this.isEdit && this.form.status === disabledStatus && this.originalStatus !== disabledStatus) {
+                    const confirmed = confirm(
+                        '\u2757 \u786e\u8ba4\u6c38\u4e45\u7981\u7528\u6b64\u4ee3\u7406\uff1f\n\n' +
+                        '\u8fd9\u5c06\u540c\u65f6\uff1a\n' +
+                        '\u2022 \u5c01\u7981\u7ed1\u5b9a\u7684 FB \u8d26\u53f7\n' +
+                        '\u2022 \u7981\u7528\u7ed1\u5b9a\u7684\u6d4f\u89c8\u5668\u7a97\u53e3\n\n' +
+                        '\u6b64\u64cd\u4f5c\u4e0d\u53ef\u64a4\u9500\uff01'
+                    );
+                    if (!confirmed) return;
+                }
+
                 const payload = {
                     host: this.form.host,
                     port: parseInt(this.form.port),
@@ -474,11 +485,11 @@
                     region: this.form.region || null,
                     status: this.form.status
                 };
-                
+
                 if (this.form.password) {
                     payload.password = this.form.password;
                 }
-                
+
                 try {
                     const response = await fetch(url, {
                         method: method,
@@ -487,17 +498,23 @@
                         },
                         body: JSON.stringify(payload)
                     });
-                    
+
+                    const result = await response.json().catch(() => ({}));
                     if (response.ok) {
                         this.showModal = false;
                         this.fetchProxies();
+                        if (result.cascade) {
+                            showToast(
+                                `\u7ea7\u8054\u64cd\u4f5c\u5b8c\u6210\uff1a\u8d26\u53f7 ${result.cascade.account || '-'} \u5df2\u5c01\u7981\uff0c\u7a97\u53e3 ${result.cascade.window || '-'} \u5df2\u7981\u7528`,
+                                'warn'
+                            );
+                        }
                     } else {
-                        const error = await response.json();
-                        alert('保存失败: ' + (error.detail || '未知错误'));
+                        alert('\u4fdd\u5b58\u5931\u8d25: ' + ((result && result.detail) || '\u672a\u77e5\u9519\u8bef'));
                     }
                 } catch (error) {
                     console.error('Error saving proxy:', error);
-                    alert('保存失败');
+                    alert('\u4fdd\u5b58\u5931\u8d25');
                 }
             },
 

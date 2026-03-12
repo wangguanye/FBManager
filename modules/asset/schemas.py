@@ -34,6 +34,9 @@ class BrowserWindowBase(BaseModel):
 class BrowserWindowCreate(BrowserWindowBase):
     pass
 
+class BrowserWindowStatusUpdate(BaseModel):
+    status: str
+
 class BrowserWindow(BrowserWindowBase):
     id: int
     synced_proxy_host: Optional[str] = None

@@ -82,6 +82,10 @@
                         <span x-show="!processing.has(window.id)" x-text="'\u5173\u95ed'"></span>
                         <span x-show="processing.has(window.id)">...</span>
                     </button>
+                    <button x-show="window.status !== '\u6c38\u4e45\u7981\u7528'" @click="disableWindow(window)" class="text-red-700 hover:text-red-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                        <span x-show="!processing.has(window.id)" x-text="'\u7981\u7528'"></span>
+                        <span x-show="processing.has(window.id)">...</span>
+                    </button>
                     <button @click="deleteWindow(window)" class="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
                         <span x-show="!processing.has(window.id)" x-text="'\u5220\u9664'"></span>
                         <span x-show="processing.has(window.id)">...</span>
@@ -189,6 +193,46 @@
                 }
             },
 
+            async disableWindow(window) {
+                const confirmed = confirm(
+                    '\u2757 \u786e\u8ba4\u6c38\u4e45\u7981\u7528\u6b64\u7a97\u53e3\uff1f\n\n' +
+                    '\u8fd9\u5c06\u540c\u65f6\uff1a\n' +
+                    '\u2022 \u5c01\u7981\u7ed1\u5b9a\u7684 FB \u8d26\u53f7\n' +
+                    '\u2022 \u7981\u7528\u7ed1\u5b9a\u7684\u4ee3\u7406 IP\n\n' +
+                    '\u6b64\u64cd\u4f5c\u4e0d\u53ef\u64a4\u9500\uff01'
+                );
+                if (!confirmed) return;
+
+                this.processing.add(window.id);
+                this.processing = new Set(this.processing);
+                try {
+                    const response = await fetch(`/api/windows/${window.id}/status`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: '\u6c38\u4e45\u7981\u7528' })
+                    });
+                    const result = await response.json().catch(() => ({}));
+
+                    if (response.ok) {
+                        this.fetchWindows();
+                        if (result.cascade) {
+                            showToast(
+                                `\u7ea7\u8054\u64cd\u4f5c\u5b8c\u6210\uff1a\u8d26\u53f7 ${result.cascade.account || '-'} \u5df2\u5c01\u7981\uff0c\u4ee3\u7406 ${result.cascade.proxy || '-'} \u5df2\u7981\u7528`,
+                                'warn'
+                            );
+                        }
+                    } else {
+                        alert('\u7981\u7528\u5931\u8d25: ' + (result.detail || '\u672a\u77e5\u9519\u8bef'));
+                    }
+                } catch (error) {
+                    console.error('Disable error:', error);
+                    alert('\u7981\u7528\u8bf7\u6c42\u5931\u8d25');
+                } finally {
+                    this.processing.delete(window.id);
+                    this.processing = new Set(this.processing);
+                }
+            },
+
             async deleteWindow(window) {
                 if (!confirm(`\u786e\u5b9a\u5220\u9664\u8be5\u7a97\u53e3\u8bb0\u5f55 ${window.name} (${window.bit_window_id}) \uff1f`)) {
                     return;
@@ -234,4 +278,3 @@
     }
 </script>
 {% endblock %}
-

@@ -185,17 +185,23 @@ async def list_proxies(
     """列出所有代理 IP，支持筛选和搜索"""
     return await service.get_proxies(db, status, q)
 
-@router.patch("/proxies/{id}", response_model=schemas.ProxyIP, tags=["Proxies"])
+@router.patch("/proxies/{id}", response_model=Dict[str, Any], tags=["Proxies"])
 async def update_proxy(
-    id: int, 
-    update_data: schemas.ProxyIPUpdate, 
+    id: int,
+    update_data: schemas.ProxyIPUpdate,
     db: AsyncSession = Depends(get_db)
 ):
-    """编辑代理 IP"""
-    proxy = await service.update_proxy(db, id, update_data)
-    if not proxy:
+    """编辑代理 IP，若触发永久禁用则返回级联信息"""
+    result = await service.update_proxy(db, id, update_data)
+    if not result:
         raise HTTPException(status_code=404, detail="Proxy not found")
-    return proxy
+
+    proxy_payload = schemas.ProxyIP.model_validate(result["proxy"]).model_dump()
+    return {
+        "code": 0,
+        "data": proxy_payload,
+        "cascade": result.get("cascade"),
+    }
 
 @router.delete("/proxies/{id}", status_code=204, tags=["Proxies"])
 async def delete_proxy(id: int, db: AsyncSession = Depends(get_db)):
@@ -356,6 +362,24 @@ async def list_windows(status: Optional[str] = None, db: AsyncSession = Depends(
             }
         )
     return payload
+
+@router.patch("/windows/{id}/status", response_model=Dict[str, Any], tags=["Windows"])
+async def update_window_status(
+    id: int,
+    update_data: schemas.BrowserWindowStatusUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """更新窗口状态，若永久禁用则返回级联信息"""
+    result = await service.update_window_status(db, id, update_data.status)
+    if not result:
+        raise HTTPException(status_code=404, detail="Window not found")
+
+    window_payload = schemas.BrowserWindow.model_validate(result["window"]).model_dump()
+    return {
+        "code": 0,
+        "data": window_payload,
+        "cascade": result.get("cascade"),
+    }
 
 @router.post("/windows/{id}/open", tags=["Windows"])
 async def open_window(id: int, db: AsyncSession = Depends(get_db)):
