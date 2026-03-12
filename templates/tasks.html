@@ -8,49 +8,52 @@
             <h2 class="text-xl font-bold text-gray-800">养号任务管理</h2>
             <p class="text-sm text-gray-500 mt-1">管理和监控每日养号任务执行情况</p>
         </div>
-        
-        <div class="flex items-center space-x-6">
+
+        <div class="flex flex-wrap items-center justify-end gap-3 md:gap-4">
             <!-- 调度器状态 -->
             <div class="flex items-center space-x-2 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
-                <span class="text-sm font-medium text-gray-700">调度器状态:</span>
+                <span class="text-sm font-medium text-gray-700">调度器状态</span>
                 <div class="flex items-center space-x-2">
-                    <div class="w-3 h-3 rounded-full" 
+                    <div class="w-3 h-3 rounded-full"
                          :class="schedulerStatus.running && !schedulerStatus.paused ? 'bg-green-500 animate-pulse' : 'bg-red-500'"></div>
-                    <span class="text-sm font-bold" 
+                    <span class="text-sm font-bold"
                           :class="schedulerStatus.running && !schedulerStatus.paused ? 'text-green-600' : 'text-red-600'"
                           x-text="getSchedulerStatusText()"></span>
                 </div>
             </div>
 
             <!-- 控制按钮 -->
-            <button @click="toggleScheduler()" 
+            <button @click="toggleScheduler()"
                     class="px-4 py-2 rounded text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2"
                     :class="schedulerStatus.paused ? 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500' : 'bg-yellow-500 hover:bg-yellow-600 text-white focus:ring-yellow-500'">
                 <span x-text="schedulerStatus.paused ? '恢复调度' : '暂停调度'"></span>
+            </button>
+
+            <button @click="toggleSopRef()"
+                    class="px-3 py-2 rounded text-sm font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-400"
+                    :class="showSopRef ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'">
+                📋 养号SOP参考
             </button>
         </div>
     </div>
 
     <!-- 筛选工具栏 -->
     <div class="bg-white rounded-lg shadow p-4 flex flex-wrap gap-4 items-center">
-        <!-- 日期选择 -->
         <div class="flex items-center space-x-2">
             <label class="text-sm font-medium text-gray-700">日期:</label>
-            <input type="date" x-model="filters.date" @change="loadTasks()" 
+            <input type="date" x-model="filters.date" @change="loadTasks()"
                    class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
         </div>
 
-        <!-- 账号筛选 -->
         <div class="flex items-center space-x-2">
             <label class="text-sm font-medium text-gray-700">账号ID:</label>
             <input type="text" x-model="filters.accountId" placeholder="输入账号ID"
                    class="w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
         </div>
 
-        <!-- 状态筛选 -->
         <div class="flex items-center space-x-2">
             <label class="text-sm font-medium text-gray-700">状态:</label>
-            <select x-model="filters.status" 
+            <select x-model="filters.status"
                     class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                 <option value="">全部</option>
                 <option value="pending">待执行</option>
@@ -65,115 +68,227 @@
         </button>
     </div>
 
-    <!-- 任务列表 -->
-    <div class="bg-white shadow overflow-hidden rounded-lg">
-        <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">账号</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Day N</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">任务内容</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">计划时间</th>
-                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    <template x-for="task in filteredTasks" :key="task.id">
-                        <tr @click="toggleLogs(task)" class="cursor-pointer" :class="getTaskRowClass(task)">
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="task.id"></td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600">
-                                <a @click.stop :href="'/accounts?id=' + task.fb_account_id" x-text="'Account ' + task.fb_account_id"></a>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="'Day ' + task.day_number"></td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                <div x-text="task.action"></div>
-                                <div x-show="task.execution_type === 'manual' && task.status === 'pending'" class="text-xs text-yellow-700 mt-1">⚠️ 需手动完成</div>
-                                <div x-show="getManualTimeoutLabel(task)" class="text-xs mt-1" :class="getManualTimeoutTextClass(task)" x-text="getManualTimeoutLabel(task)"></div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="flex space-x-1">
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                                          :class="task.execution_type === 'auto' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'"
-                                          x-text="task.execution_type === 'auto' ? '🤖 自动' : '✋ 人工'">
-                                    </span>
-                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800"
-                                          :class="task.task_type === 'daily' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
-                                          x-text="task.task_type === 'daily' ? '🔄 每日' : '一次性'">
-                                    </span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                                      :class="{
-                                          'bg-green-100 text-green-800': task.status === 'completed',
-                                          'bg-red-100 text-red-800': task.status === 'failed',
-                                          'bg-yellow-100 text-yellow-800': task.status === 'pending',
-                                          'bg-blue-100 text-blue-800': task.status === 'running'
-                                      }"
-                                      x-text="formatStatus(task.status)">
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                <div x-text="formatDate(task.scheduled_time)"></div>
-                                <div x-show="task.executed_at" class="text-xs text-gray-400 mt-1" x-text="'执行于: ' + formatDate(task.executed_at)"></div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                <template x-if="task.execution_type === 'manual' && task.status === 'pending'">
-                                    <button @click.stop="completeTask(task.id)" class="text-yellow-700 hover:text-yellow-800 bg-yellow-50 px-3 py-1 rounded border border-yellow-200 shadow-sm hover:bg-yellow-100">
-                                        ✅ 确认完成
-                                    </button>
-                                </template>
-                                <template x-if="task.execution_type === 'auto' && task.status === 'pending'">
-                                    <button @click.stop="runTaskNow(task.fb_account_id)" class="text-gray-400 hover:text-gray-600" title="立即触发账号任务">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                        </svg>
-                                    </button>
-                                </template>
-                            </td>
-                        </tr>
-                        <tr x-show="expandedTaskId === task.id" class="bg-gray-50">
-                            <td colspan="8" class="px-6 py-4">
-                                <div class="space-y-3">
-                                    <div class="text-sm font-semibold text-gray-700">任务执行日志</div>
-                                    <div x-show="loadingLogs[task.id]" class="text-sm text-gray-500">加载中...</div>
-                                    <div x-show="!loadingLogs[task.id] && (!taskLogs[task.id] || taskLogs[task.id].length === 0)" class="text-sm text-gray-500">暂无日志</div>
-                                    <div class="space-y-2">
-                                        <template x-for="log in (taskLogs[task.id] || [])" :key="log.id">
-                                            <div class="flex items-start gap-3 text-sm">
-                                                <div class="w-36 text-gray-500" x-text="formatDate(log.created_at)"></div>
-                                                <div class="w-40 text-gray-700" x-text="log.action_type"></div>
-                                                <div class="w-20">
-                                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                                                          :class="{
-                                                              'bg-blue-100 text-blue-800': log.level === 'INFO',
-                                                              'bg-yellow-100 text-yellow-800': log.level === 'WARN',
-                                                              'bg-red-100 text-red-800': log.level === 'ERROR',
-                                                              'bg-red-600 text-white': log.level === 'CRITICAL'
-                                                          }"
-                                                          x-text="log.level">
-                                                    </span>
-                                                </div>
-                                                <div class="flex-1 text-gray-800 break-all" x-text="log.message"></div>
+    <div class="flex flex-col xl:flex-row gap-4 items-start">
+        <!-- 任务列表 -->
+        <div class="min-w-0 transition-all duration-300" :class="showSopRef ? 'w-full xl:w-2/3' : 'w-full'">
+            <div class="bg-white shadow overflow-hidden rounded-lg">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">账号</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Day N</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">任务内容</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">计划时间</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <template x-for="task in filteredTasks" :key="task.id">
+                                <template>
+                                    <tr @click="toggleLogs(task)" class="cursor-pointer" :class="getTaskRowClass(task)">
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="task.id"></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-indigo-600">
+                                            <a @click.stop :href="'/accounts?id=' + task.fb_account_id" x-text="'Account ' + task.fb_account_id"></a>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="'Day ' + task.day_number"></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <div x-text="task.action"></div>
+                                            <div x-show="task.execution_type === 'manual' && task.status === 'pending'" class="text-xs text-yellow-700 mt-1">⚠️ 需手动完成</div>
+                                            <div x-show="getManualTimeoutLabel(task)" class="text-xs mt-1" :class="getManualTimeoutTextClass(task)" x-text="getManualTimeoutLabel(task)"></div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex space-x-1">
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                                      :class="task.execution_type === 'auto' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'"
+                                                      x-text="task.execution_type === 'auto' ? '🤖 自动' : '✋ 人工'">
+                                                </span>
+                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                                      :class="task.task_type === 'daily' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
+                                                      x-text="task.task_type === 'daily' ? '📅 每日' : '一次性'">
+                                                </span>
                                             </div>
-                                        </template>
-                                    </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                                  :class="{
+                                                      'bg-green-100 text-green-800': task.status === 'completed',
+                                                      'bg-red-100 text-red-800': task.status === 'failed',
+                                                      'bg-yellow-100 text-yellow-800': task.status === 'pending',
+                                                      'bg-blue-100 text-blue-800': task.status === 'running'
+                                                  }"
+                                                  x-text="formatStatus(task.status)">
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <div x-text="formatDate(task.scheduled_time)"></div>
+                                            <div x-show="task.executed_at" class="text-xs text-gray-400 mt-1" x-text="'执行于: ' + formatDate(task.executed_at)"></div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <template x-if="task.execution_type === 'manual' && task.status === 'pending'">
+                                                <button @click.stop="completeTask(task.id)" class="text-yellow-700 hover:text-yellow-800 bg-yellow-50 px-3 py-1 rounded border border-yellow-200 shadow-sm hover:bg-yellow-100">
+                                                    ✋ 确认完成
+                                                </button>
+                                            </template>
+                                            <template x-if="task.execution_type === 'auto' && task.status === 'pending'">
+                                                <button @click.stop="runTaskNow(task.fb_account_id)" class="text-gray-400 hover:text-gray-600" title="立即触发账号任务">
+                                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                                    </svg>
+                                                </button>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                    <tr x-show="expandedTaskId === task.id" class="bg-gray-50">
+                                        <td colspan="8" class="px-6 py-4">
+                                            <div class="space-y-3">
+                                                <div class="text-sm font-semibold text-gray-700">任务执行日志</div>
+                                                <div x-show="loadingLogs[task.id]" class="text-sm text-gray-500">加载中...</div>
+                                                <div x-show="!loadingLogs[task.id] && (!taskLogs[task.id] || taskLogs[task.id].length === 0)" class="text-sm text-gray-500">暂无日志</div>
+                                                <div class="space-y-2">
+                                                    <template x-for="log in (taskLogs[task.id] || [])" :key="log.id">
+                                                        <div class="flex items-start gap-3 text-sm">
+                                                            <div class="w-36 text-gray-500" x-text="formatDate(log.created_at)"></div>
+                                                            <div class="w-40 text-gray-700" x-text="log.action_type"></div>
+                                                            <div class="w-20">
+                                                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                                                      :class="{
+                                                                          'bg-blue-100 text-blue-800': log.level === 'INFO',
+                                                                          'bg-yellow-100 text-yellow-800': log.level === 'WARN',
+                                                                          'bg-red-100 text-red-800': log.level === 'ERROR',
+                                                                          'bg-red-600 text-white': log.level === 'CRITICAL'
+                                                                      }"
+                                                                      x-text="log.level">
+                                                                </span>
+                                                            </div>
+                                                            <div class="flex-1 text-gray-800 break-all" x-text="log.message"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </template>
+                            <tr x-show="filteredTasks.length === 0">
+                                <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">
+                                    暂无符合条件的任务
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- SOP 参考面板 -->
+        <div x-show="showSopRef"
+             x-transition
+             class="w-full xl:w-1/3 bg-gray-50 rounded-lg border border-gray-200 overflow-hidden"
+             style="max-height: calc(100vh - 140px);">
+            <div class="p-4 h-full overflow-y-auto space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-gray-800">📋 Facebook养号SOP参考</h3>
+                    <button @click="showSopRef = false" class="text-xs text-gray-500 hover:text-gray-700">收起</button>
+                </div>
+
+                <template x-if="!sopReference.length">
+                    <div class="text-sm text-gray-500">SOP参考加载中...</div>
+                </template>
+
+                <template x-for="(day, dayIndex) in sopReference" :key="`sop-day-${day.day}-${dayIndex}`">
+                    <div class="border rounded bg-white overflow-hidden">
+                        <div @click="expandedDay = expandedDay === day.day ? null : day.day"
+                             class="px-3 py-2 cursor-pointer flex items-center justify-between"
+                             :class="getDayHeaderClass(day.color)">
+                            <span class="text-sm font-medium" x-text="day.title"></span>
+                            <span class="text-xs" x-text="expandedDay === day.day ? '▼' : '▶'"></span>
+                        </div>
+
+                        <div x-show="expandedDay === day.day" x-transition class="px-3 py-3 text-sm space-y-3">
+                            <template x-if="day.sections">
+                                <div class="space-y-3">
+                                    <template x-for="(sec, secIndex) in day.sections" :key="`sec-${day.day}-${secIndex}`">
+                                        <div>
+                                            <div class="font-medium text-gray-800" x-text="sec.subtitle"></div>
+                                            <ul class="list-disc pl-5 text-gray-600 mt-1 space-y-1">
+                                                <template x-for="(item, itemIndex) in sec.items" :key="`item-${day.day}-${secIndex}-${itemIndex}`">
+                                                    <li x-text="item"></li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                    </template>
                                 </div>
-                            </td>
-                        </tr>
-                    </template>
-                    <tr x-show="filteredTasks.length === 0">
-                        <td colspan="8" class="px-6 py-4 text-center text-sm text-gray-500">
-                            暂无符合条件的任务
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                            </template>
+
+                            <template x-if="day.once">
+                                <div>
+                                    <div class="font-medium text-purple-700">一次性任务：</div>
+                                    <ul class="list-disc pl-5 text-gray-600 mt-1 space-y-1">
+                                        <template x-for="(taskItem, itemIndex) in day.once" :key="`once-${day.day}-${itemIndex}`">
+                                            <li x-text="taskItem"></li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </template>
+
+                            <template x-if="day.daily">
+                                <div>
+                                    <div class="font-medium text-blue-700">每日行为：</div>
+                                    <ul class="list-disc pl-5 text-gray-600 mt-1 space-y-1">
+                                        <template x-for="(taskItem, itemIndex) in day.daily" :key="`daily-${day.day}-${itemIndex}`">
+                                            <li x-text="taskItem"></li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </template>
+
+                            <template x-if="day.forbidden">
+                                <div>
+                                    <div class="font-medium text-red-700">⛔ 禁止：</div>
+                                    <ul class="list-disc pl-5 text-red-600 mt-1 space-y-1">
+                                        <template x-for="(taskItem, itemIndex) in day.forbidden" :key="`forbidden-${day.day}-${itemIndex}`">
+                                            <li x-text="taskItem"></li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </template>
+
+                            <template x-if="day.warning">
+                                <div class="p-2 bg-red-50 border border-red-200 rounded text-red-700 text-xs" x-text="'⚠️ ' + day.warning"></div>
+                            </template>
+
+                            <template x-if="day.principle">
+                                <div class="p-2 bg-blue-50 border border-blue-200 rounded text-blue-700 text-xs" x-text="'💡 ' + day.principle"></div>
+                            </template>
+
+                            <div x-show="day.time" class="text-xs text-gray-400" x-text="'⏱ 在线时长: ' + day.time"></div>
+                        </div>
+                    </div>
+                </template>
+
+                <div class="border rounded bg-white overflow-hidden">
+                    <div @click="showRisks = !showRisks" class="px-3 py-2 cursor-pointer bg-red-50 flex items-center justify-between">
+                        <span class="font-medium text-sm text-red-700">🚫 高危行为速查</span>
+                        <span class="text-xs" x-text="showRisks ? '▼' : '▶'"></span>
+                    </div>
+                    <div x-show="showRisks" x-transition class="p-3 space-y-2">
+                        <template x-for="(risk, riskIndex) in highRiskBehaviors" :key="`risk-${riskIndex}`">
+                            <div class="flex gap-2 text-xs items-start">
+                                <span x-text="risk.level" class="shrink-0"></span>
+                                <div>
+                                    <strong x-text="risk.behavior"></strong>
+                                    <span class="text-gray-500" x-text="' - ' + risk.note"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -191,17 +306,22 @@
             expandedTaskId: null,
             taskLogs: {},
             loadingLogs: {},
-            
+            showSopRef: false,
+            expandedDay: null,
+            showRisks: false,
+            sopReference: [],
+            highRiskBehaviors: [],
+
             init() {
                 this.loadSchedulerStatus();
+                this.loadSopReference();
                 this.loadTasks();
-                
-                // 自动刷新状态
+
                 setInterval(() => {
                     this.loadSchedulerStatus();
                 }, 30000);
             },
-            
+
             async loadSchedulerStatus() {
                 try {
                     const res = await fetch('/api/scheduler/status');
@@ -212,19 +332,85 @@
                     console.error('Failed to load scheduler status', e);
                 }
             },
-            
+
+            async loadSopReference() {
+                try {
+                    const res = await fetch('/api/sop/reference');
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    this.sopReference = data.sop || [];
+                    this.highRiskBehaviors = data.high_risk || [];
+                    if (this.expandedDay === null && this.sopReference.length) {
+                        this.expandedDay = this.sopReference[0].day;
+                    }
+                    this.syncSopReferenceByContext();
+                } catch (e) {
+                    console.error('Failed to load SOP reference', e);
+                }
+            },
+
             async loadTasks() {
                 try {
                     const params = new URLSearchParams({ date: this.filters.date });
                     const res = await fetch(`/api/tasks/today?${params}`);
                     if (res.ok) {
                         this.tasks = await res.json();
+                        this.syncSopReferenceByContext();
                     }
                 } catch (e) {
                     console.error('Failed to load tasks', e);
                 }
             },
-            
+
+            toggleSopRef() {
+                this.showSopRef = !this.showSopRef;
+                if (this.showSopRef && !this.sopReference.length) {
+                    this.loadSopReference();
+                }
+                if (this.showSopRef) {
+                    this.syncSopReferenceByContext();
+                }
+            },
+
+            syncSopReferenceByContext() {
+                const accountFilter = String(this.filters.accountId || '').trim();
+                if (!accountFilter || !this.tasks.length) {
+                    return;
+                }
+
+                const accountTasks = this.tasks.filter(task => {
+                    const taskAccount = String(task.fb_account_id);
+                    return taskAccount === accountFilter || taskAccount.includes(accountFilter);
+                });
+                if (!accountTasks.length) {
+                    return;
+                }
+
+                const pendingTasks = accountTasks.filter(task => task.status === 'pending');
+                const sourceTasks = pendingTasks.length ? pendingTasks : accountTasks;
+                const dayNumbers = sourceTasks
+                    .map(task => Number(task.day_number))
+                    .filter(day => Number.isFinite(day));
+
+                if (!dayNumbers.length) {
+                    return;
+                }
+
+                this.expandedDay = Math.min(...dayNumbers);
+                this.showSopRef = true;
+            },
+
+            getDayHeaderClass(color) {
+                const colorMap = {
+                    yellow: 'bg-yellow-50',
+                    orange: 'bg-orange-50',
+                    green: 'bg-green-50',
+                    blue: 'bg-blue-50',
+                    gray: 'bg-gray-100'
+                };
+                return colorMap[color] || 'bg-gray-50';
+            },
+
             get filteredTasks() {
                 return this.tasks.filter(task => {
                     const matchAccount = !this.filters.accountId || String(task.fb_account_id).includes(this.filters.accountId);
@@ -232,32 +418,31 @@
                     return matchAccount && matchStatus;
                 });
             },
-            
+
             getSchedulerStatusText() {
                 if (this.schedulerStatus.running && !this.schedulerStatus.paused) return '🟢 运行中';
                 return '🔴 已暂停';
             },
-            
+
             async toggleScheduler() {
                 const action = this.schedulerStatus.paused ? 'resume' : 'pause';
                 try {
                     const res = await fetch(`/api/scheduler/${action}`, { method: 'POST' });
                     if (res.ok) {
                         await this.loadSchedulerStatus();
-                        // Show toast or alert?
                     }
                 } catch (e) {
                     console.error(`Failed to ${action} scheduler`, e);
                 }
             },
-            
+
             async completeTask(taskId) {
                 if (!confirm('确认该人工任务已完成？')) return;
-                
+
                 try {
                     const res = await fetch(`/api/tasks/${taskId}/complete`, { method: 'POST' });
                     if (res.ok) {
-                        this.loadTasks(); // Refresh list
+                        this.loadTasks();
                     } else {
                         alert('操作失败');
                     }
@@ -325,7 +510,7 @@
                 if (!level) return '';
                 const hoursElapsed = this.getManualTimeoutHours(task);
                 const days = Math.max(1, Math.floor(hoursElapsed / 24));
-                if (level === 'block') return `🚨 已超时 ${days} 天，后续任务已暂停`;
+                if (level === 'block') return `🚫 已超时 ${days} 天，后续任务已暂停`;
                 return `⏰ 已超时 ${days} 天`;
             },
 
@@ -347,19 +532,19 @@
                 }
                 return '';
             },
-            
+
             formatDate(dateStr) {
                 if (!dateStr) return '-';
                 const date = new Date(dateStr);
                 return date.toLocaleString('zh-CN', { hour12: false });
             },
-            
+
             formatStatus(status) {
                 const map = {
-                    'pending': '待执行',
-                    'running': '执行中',
-                    'completed': '已完成',
-                    'failed': '失败'
+                    pending: '待执行',
+                    running: '执行中',
+                    completed: '已完成',
+                    failed: '失败'
                 };
                 return map[status] || status;
             }

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from db.database import get_db
 from modules.monitor import schemas
 from modules.nurture import service
+from modules.nurture.sop_reference import SOP_REFERENCE, HIGH_RISK_BEHAVIORS
 from core.scheduler import pause_scheduler, resume_scheduler, get_scheduler_status, scheduler
 
 router = APIRouter(tags=["Nurture Tasks"])
@@ -53,6 +54,13 @@ async def run_action(account_id: int, payload: RunActionPayload):
     except ValueError as e:
         return {"code": 1, "data": {}, "msg": str(e)}
     return {"code": 0, "data": {"task_id": task_id}, "msg": ""}
+
+@router.get("/sop/reference")
+async def get_sop_reference():
+    return {
+        "sop": SOP_REFERENCE,
+        "high_risk": HIGH_RISK_BEHAVIORS,
+    }
 
 @router.post("/tasks/{task_id}/complete")
 async def complete_task(
