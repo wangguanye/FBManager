@@ -312,6 +312,10 @@ async def list_windows(status: Optional[str] = None, db: AsyncSession = Depends(
                 "port": w.fb_account.proxy.port,
             }
 
+        display_status = w.status
+        if display_status == "\u8fd0\u884c\u4e2d":
+            display_status = "\u4f7f\u7528\u4e2d" if bound_account else "\u7a7a\u95f2"
+
         synced_proxy = None
         if w.synced_proxy_host:
             if w.synced_proxy_port is not None:
@@ -335,7 +339,8 @@ async def list_windows(status: Optional[str] = None, db: AsyncSession = Depends(
                 "id": w.id,
                 "bit_window_id": w.bit_window_id,
                 "name": w.name,
-                "status": w.status,
+                "status": display_status,
+                "is_running": bool(w.is_running),
                 "synced_proxy_host": w.synced_proxy_host,
                 "synced_proxy_port": w.synced_proxy_port,
                 "synced_proxy_type": w.synced_proxy_type,

@@ -66,6 +66,7 @@ class BrowserWindow(Base):
     synced_proxy_username = Column(String, nullable=True)
     # --- Synced platform username from BitBrowser detail ---
     synced_username = Column(String, nullable=True)  # FB platform username from BitBrowser config
+    is_running = Column(Boolean, default=False, nullable=False, server_default="0")
     remark = Column(String, nullable=True)
     last_synced_at = Column(DateTime, nullable=True)
 

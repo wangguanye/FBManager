@@ -2,7 +2,7 @@
 
 {% block content %}
 <div x-data="windowsManager()" x-init="fetchWindows()" class="space-y-6">
-    <!-- 顶部操作栏 -->
+    <!-- Top Toolbar -->
     <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
         <div class="flex items-center gap-4 w-full sm:w-auto">
             <button @click="syncWindows()" :disabled="syncing" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -11,7 +11,7 @@
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span x-text="syncing ? '同步中...' : '同步窗口列表'"></span>
+                <span x-text="syncing ? '\u540c\u6b65\u4e2d...' : '\u540c\u6b65\u7a97\u53e3\u5217\u8868'"></span>
             </button>
         </div>
         <!-- 搜索/筛选暂未要求，预留位置 -->
@@ -22,22 +22,24 @@
         <table class="min-w-full divide-y divide-gray-200">
     <thead class="bg-gray-50">
         <tr>
-            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
-            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">窗口 ID</th>
-            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
-            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">运行</th>
-            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">绑定代理 IP</th>
-            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">账号</th>
-            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">&#29366;&#24577;</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">&#31383;&#21475; ID</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">&#31383;&#21475;&#21517;&#31216;</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">&#32465;&#23450;&#20195;&#29702; IP</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">&#36134;&#21495;</th>
+            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">&#25805;&#20316;</th>
         </tr>
     </thead>
     <tbody class="bg-white divide-y divide-gray-200">
         <template x-for="window in windows" :key="window.id">
-            <tr :class="{'bg-red-50': window.status === '永久禁用', 'bg-gray-50': window.status === '已失联'}">
+            <tr :class="{'bg-red-50': window.status === '\u6c38\u4e45\u7981\u7528', 'bg-gray-50': window.status === '\u5df2\u5931\u8054'}">
                 <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex items-center gap-2">
+                        <span :class="window.is_running ? 'bg-green-500' : 'bg-gray-300'"
+                              class="inline-block w-2 h-2 rounded-full"
+                              :title="window.is_running ? '\u8fd0\u884c\u4e2d' : '\u672a\u8fd0\u884c'"></span>
                         <span :class="getStatusColor(window.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-opacity-10" x-text="window.status"></span>
-                        <span x-show="window.status === '永久禁用'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-600 text-white">禁用</span>
+                        <span x-show="window.status === '\u6c38\u4e45\u7981\u7528'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-600 text-white" x-text="'\u7981\u7528'"></span>
                     </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono" x-text="window.bit_window_id"></td>
@@ -45,20 +47,17 @@
                     <div x-text="window.name"></div>
                     <div x-show="window.remark" class="text-xs text-gray-500" x-text="window.remark"></div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <span x-text="window.status === '运行中' ? '是' : '否'"></span>
-                </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" :class="window.proxy_mismatch ? 'bg-yellow-100' : ''">
                     <template x-if="window.synced_proxy">
                         <span>
                             <span x-text="window.synced_proxy"></span>
                             <template x-if="window.proxy_mismatch">
-                                <span class="text-yellow-600 ml-1" title="⚠️ 比特浏览器代理与本地记录不一致">⚠️</span>
+                                <span class="text-yellow-600 ml-1" :title="'\u26a0\ufe0f \u6bd4\u7279\u6d4f\u89c8\u5668\u4ee3\u7406\u4e0e\u672c\u5730\u8bb0\u5f55\u4e0d\u4e00\u81f4'" x-text="'\u26a0\ufe0f'"></span>
                             </template>
                         </span>
                     </template>
                     <template x-if="!window.synced_proxy">
-                        <span class="text-gray-400">未配置</span>
+                        <span class="text-gray-400" x-text="'\u672a\u914d\u7f6e'"></span>
                     </template>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -75,23 +74,23 @@
                     </template>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button @click="openWindow(window)" class="text-indigo-600 hover:text-indigo-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id) || window.status === '永久禁用'" :title="window.status === '永久禁用' ? '已永久禁用' : ''">
-                        <span x-show="!processing.has(window.id)">打开</span>
+                    <button @click="openWindow(window)" class="text-indigo-600 hover:text-indigo-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id) || window.status === '\u6c38\u4e45\u7981\u7528'" :title="window.status === '\u6c38\u4e45\u7981\u7528' ? '\u5df2\u6c38\u4e45\u7981\u7528' : ''">
+                        <span x-show="!processing.has(window.id)" x-text="'\u6253\u5f00'"></span>
                         <span x-show="processing.has(window.id)">...</span>
                     </button>
-                    <button x-show="window.status !== '永久禁用'" @click="closeWindow(window)" class="text-yellow-600 hover:text-yellow-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
-                        <span x-show="!processing.has(window.id)">关闭</span>
+                    <button x-show="window.status !== '\u6c38\u4e45\u7981\u7528'" @click="closeWindow(window)" class="text-yellow-600 hover:text-yellow-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
+                        <span x-show="!processing.has(window.id)" x-text="'\u5173\u95ed'"></span>
                         <span x-show="processing.has(window.id)">...</span>
                     </button>
                     <button @click="deleteWindow(window)" class="text-red-600 hover:text-red-900 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id)">
-                        <span x-show="!processing.has(window.id)">删除</span>
+                        <span x-show="!processing.has(window.id)" x-text="'\u5220\u9664'"></span>
                         <span x-show="processing.has(window.id)">...</span>
                     </button>
                 </td>
             </tr>
         </template>
         <tr x-show="windows.length === 0">
-            <td colspan="7" class="px-6 py-4 text-center text-sm text-gray-500">暂无窗口数据，请点击同步按钮</td>
+            <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500" x-text="'\u6682\u65e0\u7a97\u53e3\u6570\u636e\uff0c\u8bf7\u70b9\u51fb\u540c\u6b65\u6309\u94ae'"></td>
         </tr>
     </tbody>
 </table>
@@ -132,11 +131,11 @@
                         this.fetchWindows();
                     } else {
                         // 失败
-                        alert('同步失败: ' + (result.detail || result.msg || '未知错误'));
+                        alert('\u540c\u6b65\u5931\u8d25: ' + (result.detail || result.msg || '\u672a\u77e5\u9519\u8bef'));
                     }
                 } catch (error) {
                     console.error('Sync error:', error);
-                    alert('同步请求失败');
+                    alert('\u540c\u6b65\u8bf7\u6c42\u5931\u8d25');
                 } finally {
                     this.syncing = false;
                 }
@@ -155,14 +154,14 @@
                     const result = await response.json();
                     
                     if (response.ok) {
-                        // Success - silently succeed or show toast (not implemented yet)
                         console.log('Window opened:', result);
+                        this.fetchWindows();
                     } else {
-                        alert('打开失败: ' + (result.detail || '未知错误'));
+                        alert('\u6253\u5f00\u5931\u8d25: ' + (result.detail || '\u672a\u77e5\u9519\u8bef'));
                     }
                 } catch (error) {
                     console.error('Open error:', error);
-                    alert('请求失败');
+                    alert('\u8bf7\u6c42\u5931\u8d25');
                 } finally {
                     this.processing.delete(window.id);
                     this.processing = new Set(this.processing);
@@ -179,11 +178,11 @@
                     if (response.ok) {
                         this.fetchWindows();
                     } else {
-                        alert('关闭失败: ' + (result.detail || '未知错误'));
+                        alert('\u5173\u95ed\u5931\u8d25: ' + (result.detail || '\u672a\u77e5\u9519\u8bef'));
                     }
                 } catch (error) {
                     console.error('Close error:', error);
-                    alert('关闭请求失败');
+                    alert('\u5173\u95ed\u8bf7\u6c42\u5931\u8d25');
                 } finally {
                     this.processing.delete(window.id);
                     this.processing = new Set(this.processing);
@@ -191,7 +190,7 @@
             },
 
             async deleteWindow(window) {
-                if (!confirm(`确定删除该窗口记录 ${window.name} (${window.bit_window_id}) ？`)) {
+                if (!confirm(`\u786e\u5b9a\u5220\u9664\u8be5\u7a97\u53e3\u8bb0\u5f55 ${window.name} (${window.bit_window_id}) \uff1f`)) {
                     return;
                 }
                 this.processing.add(window.id);
@@ -209,11 +208,11 @@
                         } catch (e) {
                             // If not JSON, use text or default message
                         }
-                        alert('删除失败: ' + (data.detail || '未知错误'));
+                        alert('\u5220\u9664\u5931\u8d25: ' + (data.detail || '\u672a\u77e5\u9519\u8bef'));
                     }
                 } catch (error) {
                     console.error('Delete error:', error);
-                    alert('删除请求失败');
+                    alert('\u5220\u9664\u8bf7\u6c42\u5931\u8d25');
                 } finally {
                     this.processing.delete(window.id);
                     this.processing = new Set(this.processing);
@@ -222,11 +221,11 @@
 
             getStatusColor(status) {
                 switch(status) {
-                    case '空闲': return 'text-green-800 bg-green-100';
-                    case '使用中': return 'text-blue-800 bg-blue-100';
-                    case '异常': return 'text-yellow-800 bg-yellow-100';
-                    case '永久禁用': return 'text-red-800 bg-red-100';
-                    case '已失联': return 'text-orange-800 bg-orange-100';
+                    case '\u7a7a\u95f2': return 'text-green-800 bg-green-100';
+                    case '\u4f7f\u7528\u4e2d': return 'text-blue-800 bg-blue-100';
+                    case '\u5f02\u5e38': return 'text-yellow-800 bg-yellow-100';
+                    case '\u6c38\u4e45\u7981\u7528': return 'text-red-800 bg-red-100';
+                    case '\u5df2\u5931\u8054': return 'text-orange-800 bg-orange-100';
                     default: return 'text-gray-800 bg-gray-100';
                 }
             }

@@ -15,7 +15,7 @@ import os
 from uuid import uuid4
 import csv
 import io
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
@@ -326,8 +326,65 @@ async def get_browser_windows(db: AsyncSession, status: str = None):
     return result.scalars().all()
 
 
+WINDOW_STATUS_IDLE = "\u7a7a\u95f2"
+WINDOW_STATUS_IN_USE = "\u4f7f\u7528\u4e2d"
+WINDOW_STATUS_RUNNING = "\u8fd0\u884c\u4e2d"
+WINDOW_STATUS_BANNED = "\u6c38\u4e45\u7981\u7528"
+WINDOW_STATUS_LOST = "\u5df2\u5931\u8054"
+
+
+def _to_bool_flag(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on", "running", "run", "open", "opened", "active", "online", "started"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off", "stopped", "stop", "close", "closed", "inactive", "idle"}:
+            return False
+        if normalized.isdigit():
+            return int(normalized) != 0
+    return None
+
+
+def _extract_running_flag(list_item: Dict[str, Any], detail: Dict[str, Any]) -> Optional[bool]:
+    candidate_keys = (
+        "isRunning",
+        "running",
+        "isOpen",
+        "open",
+        "isActive",
+        "active",
+        "isStart",
+        "isStarted",
+        "status",
+    )
+    for source in (detail, list_item):
+        for key in candidate_keys:
+            if key not in source:
+                continue
+            parsed = _to_bool_flag(source.get(key))
+            if parsed is not None:
+                return parsed
+    return None
+
+
+async def _has_active_binding(db: AsyncSession, window_id: int) -> bool:
+    binding_stmt = (
+        select(FBAccount.id)
+        .where(FBAccount.browser_window_id == window_id, FBAccount.is_deleted == False)
+        .limit(1)
+    )
+    binding_result = await db.execute(binding_stmt)
+    return binding_result.scalar_one_or_none() is not None
+
+
 async def sync_browser_windows(db: AsyncSession):
-    """同步比特浏览器窗口 — 增强版：逐窗口读取代理配置"""
+    """Sync BitBrowser windows including proxy/account/running-state metadata."""
     client = BitBrowserClient()
 
     is_alive = await client.check_alive()
@@ -340,6 +397,7 @@ async def sync_browser_windows(db: AsyncSession):
     all_windows = []
     while True:
         batch = await client.list_browsers(page=page, page_size=page_size)
+        logger.info("BitBrowser list page=%s raw=%s", page, batch)
         if not batch:
             break
         all_windows.extend(batch)
@@ -358,27 +416,39 @@ async def sync_browser_windows(db: AsyncSession):
             continue
         remote_ids.add(bit_id)
 
-        # Step 2: get detail (proxy config) for each window
+        # Step 2: get detail for each window
         detail = await client.get_browser_detail(bit_id)
+        logger.info("Window %s list raw: %s", bit_id, w)
+        logger.info("Window %s detail raw: %s", bit_id, detail)
+        logger.info(
+            "Window %s detail: proxyMethod=%s, host=%s, userName=%s",
+            bit_id,
+            detail.get("proxyMethod"),
+            detail.get("host"),
+            detail.get("userName"),
+        )
 
         name = detail.get("name") or w.get("name", "Unknown")
-        proxy_method = detail.get("proxyMethod", 0)
 
-        # Extract proxy fields only if proxyMethod != 0
-        proxy_host = detail.get("host") or None
+        # Extract proxy fields: save if host is non-empty, regardless of proxyMethod
+        proxy_host = detail.get("host") or w.get("host") or w.get("proxyHost") or None
         proxy_port = None
-        if detail.get("port"):
+        raw_port = detail.get("port") or w.get("port") or w.get("proxyPort")
+        if raw_port:
             try:
-                proxy_port = int(detail["port"])
+                proxy_port = int(raw_port)
             except (ValueError, TypeError):
                 proxy_port = None
-        proxy_type = detail.get("proxyType") or None
-        proxy_username = detail.get("proxyUserName") or None
-        remark = detail.get("remark") or None
+        proxy_type = detail.get("proxyType") or w.get("proxyType") or w.get("proxy_type") or None
+        proxy_username = detail.get("proxyUserName") or w.get("proxyUserName") or w.get("proxy_username") or None
+        remark = detail.get("remark") or w.get("remark") or None
 
-        # Step 2b: read platform username from BitBrowser config
+        # Only null out if host is truly empty, NOT based on proxyMethod
+        if not proxy_host:
+            proxy_host = proxy_port = proxy_type = proxy_username = None
+
+        # Platform login username (FB username) from BitBrowser
         synced_username = detail.get("userName") or None
-        # Note: "userName" is the platform login (FB username), NOT "proxyUserName" (proxy auth)
         if not synced_username:
             fallback_username = detail.get("username") or detail.get("user_name")
             if fallback_username:
@@ -389,8 +459,12 @@ async def sync_browser_windows(db: AsyncSession):
                 if platform_username:
                     logger.warning("BitBrowser detail for %s nests username in platform object, adaptively mapped.", bit_id)
                     synced_username = platform_username
-        if proxy_method == 0:
-            proxy_host = proxy_port = proxy_type = proxy_username = None
+            elif w.get("userName") or w.get("username"):
+                logger.warning("BitBrowser list for %s carries username field; using list fallback.", bit_id)
+                synced_username = w.get("userName") or w.get("username")
+
+        running_flag = _extract_running_flag(w, detail)
+        is_running = bool(running_flag) if running_flag is not None else False
 
         # Step 3: upsert
         stmt = select(BrowserWindow).where(BrowserWindow.bit_window_id == bit_id)
@@ -398,14 +472,19 @@ async def sync_browser_windows(db: AsyncSession):
         db_window = result.scalar_one_or_none()
 
         if db_window:
-            if db_window.status == "已失联":
-                db_window.status = "空闲"
+            if db_window.status == WINDOW_STATUS_LOST:
+                db_window.status = WINDOW_STATUS_IDLE
+            if db_window.status == WINDOW_STATUS_RUNNING:
+                has_binding = await _has_active_binding(db, db_window.id)
+                db_window.status = WINDOW_STATUS_IN_USE if has_binding else WINDOW_STATUS_IDLE
+
             db_window.name = name
             db_window.synced_proxy_host = proxy_host
             db_window.synced_proxy_port = proxy_port
             db_window.synced_proxy_type = proxy_type
             db_window.synced_proxy_username = proxy_username
             db_window.synced_username = synced_username
+            db_window.is_running = is_running
             db_window.remark = remark
             db_window.last_synced_at = datetime.utcnow()
             db.add(db_window)
@@ -413,12 +492,13 @@ async def sync_browser_windows(db: AsyncSession):
             new_window = BrowserWindow(
                 bit_window_id=bit_id,
                 name=name,
-                status="空闲",
+                status=WINDOW_STATUS_IDLE,
                 synced_proxy_host=proxy_host,
                 synced_proxy_port=proxy_port,
                 synced_proxy_type=proxy_type,
                 synced_proxy_username=proxy_username,
                 synced_username=synced_username,
+                is_running=is_running,
                 remark=remark,
                 last_synced_at=datetime.utcnow(),
             )
@@ -426,6 +506,7 @@ async def sync_browser_windows(db: AsyncSession):
             new_count += 1
 
         synced_count += 1
+
     # Step 3b: Auto-match windows to fb_accounts by synced_username
     windows_with_username = await db.execute(
         select(BrowserWindow).where(BrowserWindow.synced_username.isnot(None))
@@ -443,7 +524,7 @@ async def sync_browser_windows(db: AsyncSession):
             select(FBAccount).where(FBAccount.browser_window_id == win.id)
         )
         if existing_binding.scalar_one_or_none():
-            continue  # already bound, skip
+            continue
 
         # Find matching account by username
         matching_account = await db.execute(
@@ -455,9 +536,12 @@ async def sync_browser_windows(db: AsyncSession):
         account = matching_account.scalar_one_or_none()
         if account and account.browser_window_id is None:
             account.browser_window_id = win.id
+            if win.status not in (WINDOW_STATUS_BANNED, WINDOW_STATUS_LOST):
+                win.status = WINDOW_STATUS_IN_USE
+                db.add(win)
             auto_bound_count += 1
 
-            # Also auto-match proxy: if window has synced proxy, find matching proxy_ips record
+            # Also auto-match proxy if account currently has no proxy
             if win.synced_proxy_host and win.synced_proxy_port and account.proxy_id is None:
                 matching_proxy = await db.execute(
                     select(ProxyIP).where(
@@ -471,32 +555,43 @@ async def sync_browser_windows(db: AsyncSession):
 
             db.add(account)
 
-    # Step 4: mark local-only windows as "已失联"
+    # Step 4: mark local-only windows as lost
     all_local_stmt = select(BrowserWindow)
     all_local_result = await db.execute(all_local_stmt)
     lost_count = 0
     for local_win in all_local_result.scalars():
-        if local_win.bit_window_id not in remote_ids and local_win.status != "永久禁用":
-            local_win.status = "已失联"
+        if local_win.bit_window_id not in remote_ids and local_win.status != WINDOW_STATUS_BANNED:
+            local_win.status = WINDOW_STATUS_LOST
+            local_win.is_running = False
             db.add(local_win)
             lost_count += 1
 
     await db.flush()
-    return {"synced_count": synced_count, "new_count": new_count, "lost_count": lost_count, "auto_bound_count": auto_bound_count}
+    return {
+        "synced_count": synced_count,
+        "new_count": new_count,
+        "lost_count": lost_count,
+        "auto_bound_count": auto_bound_count,
+    }
 
 
 async def open_browser_window(db: AsyncSession, window_id: int):
-    """打开浏览器窗口"""
-    window = await db.get(BrowserWindow, window_id)
+    """Open browser window and mark running state."""
+    stmt = select(BrowserWindow).where(BrowserWindow.id == window_id)
+    result = await db.execute(stmt)
+    window = result.scalar_one_or_none()
     if not window:
         raise HTTPException(status_code=404, detail="Window not found")
-    if window.status == "永久禁用":
-        raise HTTPException(status_code=403, detail="该窗口已被永久禁用，无法打开")
-        
+    if window.status == WINDOW_STATUS_BANNED:
+        raise HTTPException(status_code=403, detail="Window is permanently disabled")
+
     client = BitBrowserClient()
     try:
         res = await client.open_browser(window.bit_window_id)
-        window.status = "运行中"
+        window.is_running = True
+        if window.status == WINDOW_STATUS_RUNNING:
+            has_binding = await _has_active_binding(db, window.id)
+            window.status = WINDOW_STATUS_IN_USE if has_binding else WINDOW_STATUS_IDLE
         db.add(window)
         await db.flush()
         return res
@@ -505,31 +600,30 @@ async def open_browser_window(db: AsyncSession, window_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to open browser: {str(e)}")
 
+
 async def close_browser_window(db: AsyncSession, window_id: int):
-    """关闭浏览器窗口"""
-    window = await db.get(BrowserWindow, window_id)
+    """Close browser window and mark running state with safe DB updates."""
+    stmt = select(BrowserWindow).where(BrowserWindow.id == window_id)
+    result = await db.execute(stmt)
+    window = result.scalar_one_or_none()
     if not window:
         raise HTTPException(status_code=404, detail="Window not found")
-        
+
     client = BitBrowserClient()
     try:
         await client.close_browser(window.bit_window_id)
-        previous_status = window.status
-        if previous_status == "永久禁用":
-            window.status = "永久禁用"
-        elif previous_status == "使用中":
-            window.status = "使用中"
-        elif previous_status == "运行中":
-            window.status = "使用中" if window.fb_account else "空闲"
-        else:
-            window.status = "空闲"
-        db.add(window)
-        await db.flush()
-        return True
     except BitBrowserNotRunningError:
         raise HTTPException(status_code=503, detail="BitBrowser is not running")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to close browser: {str(e)}")
+        logger.warning("close_browser API warning for %s: %s", window.bit_window_id, e)
+
+    window.is_running = False
+    if window.status not in (WINDOW_STATUS_BANNED, WINDOW_STATUS_LOST):
+        has_binding = await _has_active_binding(db, window.id)
+        window.status = WINDOW_STATUS_IN_USE if has_binding else WINDOW_STATUS_IDLE
+    db.add(window)
+    await db.flush()
+    return True
 
 ACCOUNT_HEADERS = ("username", "password", "totp_secret", "email", "email_password", "cookie", "browser_profile_id")
 ACCOUNT_REQUIRED_FIELDS = ("username", "password", "email", "email_password")
