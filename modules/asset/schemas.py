@@ -40,6 +40,7 @@ class BrowserWindow(BrowserWindowBase):
     synced_proxy_port: Optional[int] = None
     synced_proxy_type: Optional[str] = None
     synced_proxy_username: Optional[str] = None
+    synced_username: Optional[str] = None
     remark: Optional[str] = None
     last_synced_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)

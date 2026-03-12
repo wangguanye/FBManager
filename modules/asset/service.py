@@ -16,6 +16,9 @@ from uuid import uuid4
 import csv
 import io
 from typing import Any, Dict, List, Tuple
+import logging
+
+logger = logging.getLogger(__name__)
 
 async def create_fb_account(db: AsyncSession, account: FBAccountCreate):
     """创建 FB 账号并加密敏感信息"""
@@ -346,6 +349,7 @@ async def sync_browser_windows(db: AsyncSession):
 
     synced_count = 0
     new_count = 0
+    auto_bound_count = 0
     remote_ids = set()
 
     for w in all_windows:
@@ -372,6 +376,19 @@ async def sync_browser_windows(db: AsyncSession):
         proxy_username = detail.get("proxyUserName") or None
         remark = detail.get("remark") or None
 
+        # Step 2b: read platform username from BitBrowser config
+        synced_username = detail.get("userName") or None
+        # Note: "userName" is the platform login (FB username), NOT "proxyUserName" (proxy auth)
+        if not synced_username:
+            fallback_username = detail.get("username") or detail.get("user_name")
+            if fallback_username:
+                logger.warning("BitBrowser detail for %s uses non-standard username field, adaptively mapped.", bit_id)
+                synced_username = fallback_username
+            elif isinstance(detail.get("platform"), dict):
+                platform_username = detail["platform"].get("userName") or detail["platform"].get("username")
+                if platform_username:
+                    logger.warning("BitBrowser detail for %s nests username in platform object, adaptively mapped.", bit_id)
+                    synced_username = platform_username
         if proxy_method == 0:
             proxy_host = proxy_port = proxy_type = proxy_username = None
 
@@ -388,6 +405,7 @@ async def sync_browser_windows(db: AsyncSession):
             db_window.synced_proxy_port = proxy_port
             db_window.synced_proxy_type = proxy_type
             db_window.synced_proxy_username = proxy_username
+            db_window.synced_username = synced_username
             db_window.remark = remark
             db_window.last_synced_at = datetime.utcnow()
             db.add(db_window)
@@ -400,6 +418,7 @@ async def sync_browser_windows(db: AsyncSession):
                 synced_proxy_port=proxy_port,
                 synced_proxy_type=proxy_type,
                 synced_proxy_username=proxy_username,
+                synced_username=synced_username,
                 remark=remark,
                 last_synced_at=datetime.utcnow(),
             )
@@ -407,6 +426,50 @@ async def sync_browser_windows(db: AsyncSession):
             new_count += 1
 
         synced_count += 1
+    # Step 3b: Auto-match windows to fb_accounts by synced_username
+    windows_with_username = await db.execute(
+        select(BrowserWindow).where(BrowserWindow.synced_username.isnot(None))
+    )
+    for win in windows_with_username.scalars():
+        if not win.synced_username:
+            continue
+
+        username_key = win.synced_username.strip()
+        if not username_key:
+            continue
+
+        # Check if already bound (an account already has browser_window_id = this window)
+        existing_binding = await db.execute(
+            select(FBAccount).where(FBAccount.browser_window_id == win.id)
+        )
+        if existing_binding.scalar_one_or_none():
+            continue  # already bound, skip
+
+        # Find matching account by username
+        matching_account = await db.execute(
+            select(FBAccount).where(
+                FBAccount.username == username_key,
+                FBAccount.is_deleted == False,
+            )
+        )
+        account = matching_account.scalar_one_or_none()
+        if account and account.browser_window_id is None:
+            account.browser_window_id = win.id
+            auto_bound_count += 1
+
+            # Also auto-match proxy: if window has synced proxy, find matching proxy_ips record
+            if win.synced_proxy_host and win.synced_proxy_port and account.proxy_id is None:
+                matching_proxy = await db.execute(
+                    select(ProxyIP).where(
+                        ProxyIP.host == win.synced_proxy_host,
+                        ProxyIP.port == win.synced_proxy_port,
+                    )
+                )
+                proxy = matching_proxy.scalar_one_or_none()
+                if proxy:
+                    account.proxy_id = proxy.id
+
+            db.add(account)
 
     # Step 4: mark local-only windows as "已失联"
     all_local_stmt = select(BrowserWindow)
@@ -419,7 +482,7 @@ async def sync_browser_windows(db: AsyncSession):
             lost_count += 1
 
     await db.flush()
-    return {"synced_count": synced_count, "new_count": new_count, "lost_count": lost_count}
+    return {"synced_count": synced_count, "new_count": new_count, "lost_count": lost_count, "auto_bound_count": auto_bound_count}
 
 
 async def open_browser_window(db: AsyncSession, window_id: int):

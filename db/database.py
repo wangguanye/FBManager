@@ -46,6 +46,7 @@ def ensure_browser_window_columns(db_path: str = "./fb_manager.db"):
         "synced_proxy_port": "INTEGER",
         "synced_proxy_type": "TEXT",
         "synced_proxy_username": "TEXT",
+        "synced_username": "TEXT",
         "remark": "TEXT",
         "last_synced_at": "DATETIME",
     }

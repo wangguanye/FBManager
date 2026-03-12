@@ -340,6 +340,7 @@ async def list_windows(status: Optional[str] = None, db: AsyncSession = Depends(
                 "synced_proxy_port": w.synced_proxy_port,
                 "synced_proxy_type": w.synced_proxy_type,
                 "synced_proxy_username": w.synced_proxy_username,
+                "synced_username": w.synced_username,
                 "synced_proxy": synced_proxy,
                 "remark": w.remark,
                 "last_synced_at": w.last_synced_at.isoformat() if w.last_synced_at else None,

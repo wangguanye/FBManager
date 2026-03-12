@@ -62,8 +62,17 @@
                     </template>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <a x-show="window.bound_account" :href="'/accounts?q=' + window.bound_account.username" class="text-indigo-600 hover:text-indigo-900" x-text="window.bound_account.username"></a>
-                    <span x-show="!window.bound_account">-</span>
+                    <template x-if="window.bound_account">
+                        <a :href="'/accounts?id=' + window.bound_account.id"
+                           class="text-blue-600 hover:underline"
+                           x-text="window.bound_account.username"></a>
+                    </template>
+                    <template x-if="!window.bound_account && window.synced_username">
+                        <span class="text-gray-500" x-text="window.synced_username + ' (\u672a\u7ed1\u5b9a)'"></span>
+                    </template>
+                    <template x-if="!window.bound_account && !window.synced_username">
+                        <span class="text-gray-400">-</span>
+                    </template>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button @click="openWindow(window)" class="text-indigo-600 hover:text-indigo-900 mr-3 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="processing.has(window.id) || window.status === '永久禁用'" :title="window.status === '永久禁用' ? '已永久禁用' : ''">
@@ -114,8 +123,12 @@
                     const result = await response.json();
                     
                     if (response.ok) {
-                        // 成功
-                        alert(`同步成功！新增 ${result.data.new_count} 个，同步 ${result.data.synced_count} 个，已失联 ${result.data.lost_count || 0} 个。`);
+                        let r = result.data || {};
+                        let msg = `\u540c\u6b65\u6210\u529f\uff01\u540c\u6b65 ${r.synced_count} \u4e2a`;
+                        if (r.new_count) msg += `\uff0c\u65b0\u589e ${r.new_count} \u4e2a`;
+                        if (r.lost_count) msg += `\uff0c\u5df2\u5931\u8054 ${r.lost_count} \u4e2a`;
+                        if (r.auto_bound_count) msg += `\uff0c\u81ea\u52a8\u7ed1\u5b9a ${r.auto_bound_count} \u4e2a`;
+                        alert(msg);
                         this.fetchWindows();
                     } else {
                         // 失败
