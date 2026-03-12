@@ -112,6 +112,7 @@ async def logs_page(request: Request):
     return templates.TemplateResponse("logs.html", {"request": request, "title": "日志查看"})
 
 @app.get("/sop")
+@app.get("/sop-editor")
 async def sop_page(request: Request):
     """SOP 编辑器页面"""
     return templates.TemplateResponse("sop.html", {"request": request, "title": "SOP 编辑器"})
