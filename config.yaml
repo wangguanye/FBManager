@@ -45,305 +45,554 @@ backup:
 # 养号 SOP 配置
 # FIX-9 done
 nurture_sop:
-  - day: 1
-    once_tasks:
+  max_days: 15
+  days:
+    1:
+      once_tasks:
       - action: check_status
-        type: auto
-    daily_tasks:
+        execution_type: auto
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30, scroll_speed: normal}
-    online_minutes: {min: 30, max: 60}
-  - day: 2
-    once_tasks:
+        execution_type: auto
+        params:
+          duration_min: 30
+          scroll_speed: normal
+      online_minutes:
+        min: 30
+        max: 60
+    2:
+      once_tasks:
       - action: update_profile
-        type: auto
-        params: {field: privacy, value: friends_only}
-    daily_tasks:
+        execution_type: auto
+        params:
+          field: privacy
+          value: friends_only
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 5, target: feed}
-    online_minutes: {min: 30, max: 120}
-  - day: 3
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 5
+          target: feed
+      online_minutes:
+        min: 30
+        max: 120
+    3:
+      once_tasks:
       - action: upload_avatar
-        type: auto
-        params: {type: both}
+        execution_type: auto
+        params:
+          type: both
       - action: oauth_login
-        type: auto
-        params: {target_site: canva}
-    daily_tasks:
+        execution_type: auto
+        params:
+          target_site: canva
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 8, target: feed}
+        execution_type: auto
+        params:
+          max_count: 8
+          target: feed
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 4
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    4:
+      once_tasks:
       - action: update_profile
-        type: auto
-        params: {field: current_city, value: "目标城市"}
+        execution_type: auto
+        params:
+          field: current_city
+          value: 目标城市
       - action: oauth_login
-        type: auto
-        params: {target_site: change_org}
-    daily_tasks:
+        execution_type: auto
+        params:
+          target_site: change_org
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 8, target: feed}
+        execution_type: auto
+        params:
+          max_count: 8
+          target: feed
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 5
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    5:
+      once_tasks:
       - action: update_profile
-        type: auto
-        params: {field: hometown}
+        execution_type: auto
+        params:
+          field: hometown
       - action: oauth_login
-        type: auto
-        params: {target_site: instagram}
+        execution_type: auto
+        params:
+          target_site: instagram
       - action: enable_2fa
-        type: auto
-        params: {method: totp}
-    daily_tasks:
+        execution_type: auto
+        params:
+          method: totp
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 8, target: feed}
+        execution_type: auto
+        params:
+          max_count: 8
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 6
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    6:
+      once_tasks:
       - action: update_profile
-        type: auto
-        params: {field: birthday}
+        execution_type: auto
+        params:
+          field: birthday
       - action: update_profile
-        type: auto
-        params: {field: trusted_contacts}
+        execution_type: auto
+        params:
+          field: trusted_contacts
       - action: oauth_login
-        type: auto
-        params: {target_site: spotify}
+        execution_type: auto
+        params:
+          target_site: spotify
       - action: join_group
-        type: auto
-        params: {count: 3}
-    daily_tasks:
+        execution_type: auto
+        params:
+          count: 3
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 8, target: feed}
+        execution_type: auto
+        params:
+          max_count: 8
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 7
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    7:
+      once_tasks:
       - action: update_profile
-        type: auto
-        params: {field: gender}
+        execution_type: auto
+        params:
+          field: gender
       - action: update_profile
-        type: auto
-        params: {field: language}
-    daily_tasks:
+        execution_type: auto
+        params:
+          field: language
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 8, target: feed}
+        execution_type: auto
+        params:
+          max_count: 8
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: comment_post
-        params: {max_count: 2}
+        execution_type: auto
+        params:
+          max_count: 2
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 8
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    8:
+      once_tasks:
       - action: update_profile
-        type: auto
-        params: {field: workplace}
+        execution_type: auto
+        params:
+          field: workplace
       - action: update_profile
-        type: auto
-        params: {field: create_fanpage}
+        execution_type: auto
+        params:
+          field: create_fanpage
       - action: oauth_login
-        type: auto
-        params: {target_site: pinterest}
-    daily_tasks:
+        execution_type: auto
+        params:
+          target_site: pinterest
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 8, target: feed}
+        execution_type: auto
+        params:
+          max_count: 8
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: comment_post
-        params: {max_count: 2}
+        execution_type: auto
+        params:
+          max_count: 2
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 9
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    9:
+      once_tasks:
       - action: update_profile
-        type: manual
-        params: {field: school}
+        execution_type: manual
+        params:
+          field: school
       - action: bind_bm
-        type: manual
+        execution_type: manual
       - action: create_ad_account
-        type: manual
-    daily_tasks:
+        execution_type: manual
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 8, target: feed}
+        execution_type: auto
+        params:
+          max_count: 8
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: comment_post
-        params: {max_count: 2}
+        execution_type: auto
+        params:
+          max_count: 2
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 10
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    10:
+      once_tasks:
       - action: update_profile
-        type: auto
-        params: {field: bio}
+        execution_type: auto
+        params:
+          field: bio
       - action: oauth_login
-        type: auto
-        params: {target_site: eventbrite}
+        execution_type: auto
+        params:
+          target_site: eventbrite
       - action: update_profile
-        type: auto
-        params: {field: verify_domain}
+        execution_type: auto
+        params:
+          field: verify_domain
       - action: post_to_timeline
-        type: auto
-        params: {max_per_day: 3}
-    daily_tasks:
+        execution_type: auto
+        params:
+          max_per_day: 3
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 10, target: feed}
+        execution_type: auto
+        params:
+          max_count: 10
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: comment_post
-        params: {max_count: 5}
+        execution_type: auto
+        params:
+          max_count: 5
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 11
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    11:
+      once_tasks:
       - action: update_profile
-        type: auto
-        params: {field: relationship_website}
+        execution_type: auto
+        params:
+          field: relationship_website
       - action: post_to_timeline
-        type: auto
-        params: {target: fanpage, max_per_day: 1}
+        execution_type: auto
+        params:
+          target: fanpage
+          max_per_day: 1
       - action: update_profile
-        type: auto
-        params: {field: install_pixel}
-    daily_tasks:
+        execution_type: auto
+        params:
+          field: install_pixel
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 10, target: feed}
+        execution_type: auto
+        params:
+          max_count: 10
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: comment_post
-        params: {max_count: 5}
+        execution_type: auto
+        params:
+          max_count: 5
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 12
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    12:
+      once_tasks:
       - action: check_status
-        type: auto
-        params: {check: domain_verified_pixel}
-    daily_tasks:
+        execution_type: auto
+        params:
+          check: domain_verified_pixel
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 10, target: feed}
+        execution_type: auto
+        params:
+          max_count: 10
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: comment_post
-        params: {max_count: 5}
+        execution_type: auto
+        params:
+          max_count: 5
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 13
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    13:
+      once_tasks:
       - action: check_bm_limit
-        type: manual
+        execution_type: manual
       - action: bind_payment
-        type: manual
-    daily_tasks:
+        execution_type: manual
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 10, target: feed}
+        execution_type: auto
+        params:
+          max_count: 10
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: comment_post
-        params: {max_count: 5}
+        execution_type: auto
+        params:
+          max_count: 5
       - action: add_friend
-        params: {max_count: 8, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 14
-    once_tasks:
+        execution_type: auto
+        params:
+          max_count: 8
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+    14:
+      once_tasks:
       - action: create_first_campaign
-        type: manual
-        params: {budget: 2}
-    daily_tasks:
+        execution_type: manual
+        params:
+          budget: 2
+      daily_tasks:
       - action: scroll_feed
-        params: {duration_min: 30}
+        execution_type: auto
+        params:
+          duration_min: 30
       - action: like_post
-        params: {max_count: 10, target: feed}
+        execution_type: auto
+        params:
+          max_count: 10
+          target: feed
       - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
+        execution_type: auto
+        params:
+          count: 5
+          min_watch_seconds: 30
       - action: view_stories
-        params: {count: 5}
+        execution_type: auto
+        params:
+          count: 5
       - action: comment_post
-        params: {max_count: 5}
+        execution_type: auto
+        params:
+          max_count: 5
       - action: add_friend
-        params: {max_count: 20, target_region: US}
-    online_minutes: {min: 30, max: 120}
-  - day: 15
-    is_default: true
+        execution_type: auto
+        params:
+          max_count: 20
+          target_region: US
+      online_minutes:
+        min: 30
+        max: 120
+  default:
     once_tasks:
-      - action: weekly_ad_review
-        type: manual
+    - action: weekly_ad_review
+      execution_type: manual
     daily_tasks:
-      - action: scroll_feed
-        params: {duration_min: 30}
-      - action: like_post
-        params: {max_count: 10, target: feed}
-      - action: watch_reels
-        params: {count: 5, min_watch_seconds: 30}
-      - action: view_stories
-        params: {count: 5}
-      - action: comment_post
-        params: {max_count: 5}
-      - action: add_friend
-        params: {max_count: 20, target_region: US}
-    online_minutes: {min: 30, max: 120}
+    - action: scroll_feed
+      execution_type: auto
+      params:
+        duration_min: 30
+    - action: like_post
+      execution_type: auto
+      params:
+        max_count: 10
+        target: feed
+    - action: watch_reels
+      execution_type: auto
+      params:
+        count: 5
+        min_watch_seconds: 30
+    - action: view_stories
+      execution_type: auto
+      params:
+        count: 5
+    - action: comment_post
+      execution_type: auto
+      params:
+        max_count: 5
+    - action: add_friend
+      execution_type: auto
+      params:
+        max_count: 20
+        target_region: US
+    online_minutes:
+      min: 30
+      max: 120
+    is_default: true
