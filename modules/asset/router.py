@@ -49,15 +49,15 @@ async def download_accounts_template():
 
 @router.get("/accounts", response_model=List[schemas.FBAccount])
 async def list_accounts(
-    skip: int = 0, 
-    limit: int = 100, 
+    skip: int = 0,
+    limit: int = 100,
     status: Optional[str] = None,
     q: Optional[str] = None,
+    has_binding: Optional[bool] = None,
     db: AsyncSession = Depends(get_db)
 ):
     """账号列表，支持筛选和搜索"""
-    return await service.get_fb_accounts(db, skip, limit, status, q)
-
+    return await service.get_fb_accounts(db, skip, limit, status, q, has_binding)
 @router.get("/accounts/{id}/ad-assets")
 async def get_account_ad_assets(id: int, db: AsyncSession = Depends(get_db)):
     assets = await service.get_account_ad_assets(db, id)

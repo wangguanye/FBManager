@@ -46,8 +46,30 @@ ACTION_REGISTRY: Dict[str, Type[BaseAction]] = {}
 def register_action(cls):
     """Decorator to register an action class."""
     if hasattr(cls, "action_id"):
+        module = importlib.import_module(cls.__module__)
+        meta = getattr(module, "META", {}) if module else {}
+        if not hasattr(cls, "NAME"):
+            setattr(cls, "NAME", meta.get("name", cls.action_id if hasattr(cls, "action_id") else cls.__name__))
+        if not hasattr(cls, "PARAMS_SCHEMA"):
+            setattr(cls, "PARAMS_SCHEMA", meta.get("params_schema", {}))
         ACTION_REGISTRY[cls.action_id] = cls
     return cls
+
+class ActionRegistry:
+    """Compatibility wrapper around ACTION_REGISTRY."""
+
+    @classmethod
+    def get(cls, action_id: str):
+        if not action_id:
+            return None
+        if action_id in ACTION_REGISTRY:
+            return ACTION_REGISTRY.get(action_id)
+        prefixed = action_id if action_id.startswith("rpa.") else f"rpa.{action_id}"
+        return ACTION_REGISTRY.get(prefixed)
+
+    @classmethod
+    def get_all(cls) -> Dict[str, Type[BaseAction]]:
+        return dict(ACTION_REGISTRY)
 
 def discover_actions():
     actions_path = Path(__file__).resolve().parent / "actions"

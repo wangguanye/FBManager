@@ -76,6 +76,12 @@
                         </a>
                     </li>
                     <li>
+                        <a href="/rpa-test" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/rpa-test' else '' }}">
+                            <span class="inline-flex justify-center items-center h-6 w-6">&#129514;</span>
+                            <span x-show="sidebarOpen" class="ml-3">行为测试</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="/logs" class="flex items-center p-3 rounded-lg hover:bg-indigo-700 transition-colors {{ 'bg-indigo-700' if request.url.path == '/logs' else '' }}">
                             <span class="inline-flex justify-center items-center h-6 w-6">📝</span>
                             <span x-show="sidebarOpen" class="ml-3">日志查看</span>

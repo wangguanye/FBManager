@@ -44,44 +44,53 @@ async def create_fb_account(db: AsyncSession, account: FBAccountCreate):
     return db_account
 
 async def get_fb_accounts(
-    db: AsyncSession, 
-    skip: int = 0, 
-    limit: int = 100, 
-    status: str = None, 
-    q: str = None
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 100,
+    status: str = None,
+    q: str = None,
+    has_binding: bool = None,
 ):
     """获取所有 FB 账号，支持筛选和模糊搜索"""
     stmt = select(FBAccount).where(FBAccount.is_deleted == False).options(
         selectinload(FBAccount.proxy),
         selectinload(FBAccount.browser_window)
     )
-    
+
     if status:
         stmt = stmt.where(FBAccount.status == status)
-        
+
     if q:
         search_filter = or_(
             FBAccount.username.ilike(f"%{q}%"),
             FBAccount.notes.ilike(f"%{q}%")
         )
         stmt = stmt.where(search_filter)
-        
+
+    if has_binding is True:
+        stmt = stmt.where(
+            FBAccount.browser_window_id.isnot(None),
+            FBAccount.proxy_id.isnot(None)
+        )
+
     stmt = stmt.offset(skip).limit(limit).order_by(FBAccount.created_at.desc())
     result = await db.execute(stmt)
     accounts = result.scalars().all()
     if not accounts:
         return accounts
+
     account_ids = [item.id for item in accounts]
     score_stmt = select(HealthScore).where(HealthScore.fb_account_id.in_(account_ids))
     score_result = await db.execute(score_stmt)
     score_items = score_result.scalars().all()
     score_map = {item.fb_account_id: item for item in score_items}
+
     for account in accounts:
         score_item = score_map.get(account.id)
         account.health_score = score_item.score if score_item else 0
         account.health_grade = score_item.grade if score_item else "F"
-    return accounts
 
+    return accounts
 async def get_fb_account_by_id(db: AsyncSession, account_id: int):
     stmt = select(FBAccount).where(FBAccount.id == account_id, FBAccount.is_deleted == False)
     result = await db.execute(stmt)
